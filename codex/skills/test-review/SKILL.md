@@ -25,7 +25,7 @@ move artifacts without explicit user approval.
 ## Workflow
 
 1. Gather child path, parent path if needed, test diff/anchors, manual verification entries, git head, prior checkpoint JSON if any, and file hashes required by `child-checkpoint.v1`.
-2. Invoke Claude `test-intent-worker` with a prompt that names the installed worker path (`${HOME}/.claude/skills/test-intent-worker/SKILL.md`) and supplies the child path, test anchors, manual entries, and prior findings. If the Claude CLI is unavailable or returns non-JSON, stop and report the blocker.
+2. Invoke Claude `test-intent-worker` with a prompt that names the installed worker path (`${HOME}/.claude/skills/test-intent-worker/SKILL.md`) and supplies the child path, test anchors, manual entries, and prior findings. When spawning the Claude CLI, preserve the runtime identity environment required by plan-protocol § 13.1 (`HOME`, `PATH`, `SHELL`, `USER`, `LOGNAME` when available; derive missing `USER`/`LOGNAME` at runtime, never hard-code them). If the initial invocation fails because a restricted runtime blocks Claude auth/session lookup, perform at most one user-approved elevated retry in an auth-capable runtime with the same command, inputs, and environment. If the Claude CLI is unavailable, fails due to missing identity env, fails the retry, or returns non-JSON, stop without creating a checkpoint and report the blocker.
 3. Require stdout to be valid `child-checkpoint.v1` JSON with `checkpoint = test_intent` and an `acceptance_map` ledger.
 4. Archive the JSON to `${current_check_root}/<child>/checkpoints/test_intent.json`.
 5. Handle verdict:

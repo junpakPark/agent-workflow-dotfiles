@@ -476,6 +476,30 @@ skill must:
 Wrappers may differ by ecosystem. Only `references/plan-protocol.md`
 (this file) is byte-identical across ecosystems.
 
+### 13.1 Claude CLI Runtime Environment
+
+Codex wrappers that invoke the Claude CLI (for example `draft-review`
+and `test-review`) must preserve account identity in the spawned
+process environment. The environment must include `HOME`, `PATH`,
+`SHELL`, `USER`, and `LOGNAME` when available. If `USER` or `LOGNAME`
+is absent, derive it at runtime from `id -un` or `whoami`; never
+hard-code a username, absolute local home path, auth token, or env dump
+in a skill, checkpoint artifact, or public dotfiles repo.
+
+The process must run in an auth-capable runtime where the Claude CLI
+can perform its normal auth/session lookup. Restricted runtimes may
+block that lookup; if a login-required or auth/session lookup failure
+occurs despite preserved identity environment, the wrapper must treat it
+as a runtime prerequisite failure, not a worker verdict. With user
+approval, the wrapper may retry the same command once in an
+auth-capable runtime using the same command, inputs, and environment.
+
+If `claude -p` fails because the account identity environment is
+missing (for example, account/keychain lookup cannot resolve the user),
+the wrapper must report a runtime environment blocker. It must not
+convert that failure into a `draft-intent-worker` or `test-intent-worker`
+checkpoint verdict.
+
 ---
 
 ## 14. PLAN_ROOT and `current_check_root`
