@@ -1,6 +1,6 @@
 ---
 name: test-intent-worker
-description: Claude-side worker invoked by Codex `test-review` to verify that the tests and manual verification entries faithfully translate the child plan's acceptance contract into an executable contract. Returns a `child-checkpoint.v1` JSON verdict to stdout. No file writes, no Codex delegation. Use only when a Codex execution-stage wrapper requests a test-intent review; do not use to write or modify tests yourself.
+description: Claude-side worker invoked by Codex `test-review` to verify that the tests and manual verification entries faithfully translate the child plan's acceptance contract into an executable contract. Produces a `child-checkpoint.v1` payload object that the Codex `test-review` harness emits via the Claude CLI structured-output transport (`claude -p --output-format json --json-schema`); the harness archives the payload from the wrapper's `.structured_output` field. No file writes, no Codex delegation. Use only when a Codex execution-stage wrapper requests a test-intent review; do not use to write or modify tests yourself.
 ---
 
 # test-intent-worker
@@ -10,8 +10,13 @@ description: Claude-side worker invoked by Codex `test-review` to verify that th
 Verify that Codex-authored tests + manual verification entries
 faithfully translate the child plan's acceptance contract into an
 executable contract. This worker is invoked by the Codex `test-review`
-wrapper as part of the docs-plan v2 cross-review pattern. It returns a
-single `child-checkpoint.v1` JSON verdict to stdout.
+wrapper as part of the docs-plan v2 cross-review pattern. It produces
+a single `child-checkpoint.v1` payload object; the Codex `test-review`
+harness invokes Claude CLI with structured-output transport
+(`claude -p --output-format json --json-schema
+references/schemas/child-checkpoint.test_intent.schema.json`) and
+archives the payload from the resulting wrapper's `.structured_output`
+field per plan-protocol § 7.1.a.
 
 In docs-plan v2, the approved tests + manual verification entries
 **are** the executable contract for the subsequent `exec-impl` stage.
@@ -136,8 +141,24 @@ worker computes them from the input paths.
    - `plan-defect` — the child plan acceptance is internally
      inconsistent or unachievable, or `recurrence-2nd` was reached
      with `recurrence_cause = "contract"`
-8. **Emit JSON.** Print the `child-checkpoint.v1` envelope to stdout
-   per § 7.1 + § 7.3. Nothing else is printed.
+8. **Produce structured-output payload.** Construct a single
+   schema-conforming `child-checkpoint.v1` payload object per
+   plan-protocol § 7.1 / § 7.3 and the
+   `references/schemas/child-checkpoint.test_intent.schema.json` JSON
+   Schema. The worker remains responsible for constructing the
+   envelope object — every required top-level field, every
+   `acceptance_map` row field, and every `manual_verification_entries`
+   element. The Claude CLI structured-output transport serializes this
+   object under the wrapper's top-level `.structured_output` per
+   plan-protocol § 7.1.a; the worker does not control or wrap stdout
+   itself. The harness validates the payload against the
+   schema (§ 7.1.b), applies wrapper-side invariants (§ 7.1.d), and
+   archives `.structured_output` as the checkpoint artifact. Schema
+   shape and enums are enforced by the transport; the worker's
+   continuing responsibility is the semantic content — row coverage,
+   verbatim quote fidelity, governing-source citation discipline,
+   `rebuttal_pass` consistency with the assigned verdict, recurrence
+   judgment, and the test-as-contract cautious-approve duty.
 
 ## `audit_verdict` enum (test_intent)
 
@@ -184,16 +205,21 @@ If a non-`match` row has no governing source, the row is `ungrounded`
 
 ## Guardrails
 
-- **No file writes.** Stdout-only JSON. The Codex wrapper archives the
-  document to
-  `${current_check_root}/<child_id>/checkpoints/test_intent.json`.
+- **No file writes.** The Codex `test-review` harness invokes Claude
+  CLI structured-output transport, extracts `.structured_output` from
+  the result wrapper, and archives that payload to
+  `${current_check_root}/<child_id>/checkpoints/test_intent.json` per
+  plan-protocol § 7.1.a. The worker writes no files itself.
 - **No Codex delegation.** No `codex-adversarial`, `codex-review`, or
   `codex-rescue` invocation. The verdict is Claude's own judgment.
 - **No test or manual edits.** This worker only verifies. Codex
   rewrites tests or manual procedures via `exec-tests` when the
   verdict is `revise`.
-- **Closed envelope.** Exactly one `child-checkpoint.v1` JSON document
-  on stdout.
+- **Single payload per invocation.** Produce exactly one
+  `child-checkpoint.v1` payload object. The Claude CLI structured-output
+  transport delivers it under the wrapper's `.structured_output`
+  (plan-protocol § 7.1.a); the worker neither prints checkpoint JSON to
+  stdout itself nor emits a secondary payload alongside it.
 - **`revise_scope` discipline.** Valid values are `tests-only` and
   `manual-verification-only`. `child-plan` is invalid here — emit
   `plan-defect` if the child plan itself is wrong.
@@ -205,7 +231,14 @@ If a non-`match` row has no governing source, the row is `ungrounded`
   must be cautious: under-coverage is a plan-defect, not a
   silently-passing approval.
 
-## Output Example
+## `.structured_output` Payload Example
+
+The object below is an example of the `child-checkpoint.v1` payload the
+worker produces. The Codex `test-review` harness receives it as the
+`.structured_output` field of the Claude CLI result wrapper and archives
+it as the checkpoint artifact. This is the payload contract, not a
+stdout serialization example — the worker does not print this JSON
+itself.
 
 ```json
 {
@@ -257,8 +290,15 @@ If a non-`match` row has no governing source, the row is `ungrounded`
 
 ## Cross-References
 
-- [plan-protocol § 7](../plan-protocol/references/plan-protocol.md) — JSON envelope contract
+- [plan-protocol § 7.1](../plan-protocol/references/plan-protocol.md) — common `child-checkpoint.v1` envelope shape
+- [plan-protocol § 7.1.a](../plan-protocol/references/plan-protocol.md) — structured-output transport (harness extracts `.structured_output`; worker does not write stdout itself)
+- [plan-protocol § 7.1.b](../plan-protocol/references/plan-protocol.md) — schema validity (canonical shape source is the JSON Schema below)
+- [child-checkpoint.test_intent JSON Schema](../plan-protocol/references/schemas/child-checkpoint.test_intent.schema.json) — canonical shape source for the `test_intent` payload (required fields, enums, ledger row fields)
+- [plan-protocol § 7.1.c](../plan-protocol/references/plan-protocol.md) — failure handling (transport / schema / invariant failures stop and escalate; no semantic retry by the harness)
+- [plan-protocol § 7.1.d](../plan-protocol/references/plan-protocol.md) — wrapper-side invariants (cross-field rules and the schema-coercion hard-reject phrase list)
+- [plan-protocol § 7.3](../plan-protocol/references/plan-protocol.md) — `test_intent` ledger and `reviewed_inputs` shape
+- [plan-protocol § 7.4](../plan-protocol/references/plan-protocol.md) — verdict semantics
 - [plan-protocol § 8](../plan-protocol/references/plan-protocol.md) — recurrence routing
 - [plan-protocol § 10](../plan-protocol/references/plan-protocol.md) — cross-orchestrator escalation (this worker never writes a `## Status` marker; the wrapper does)
-- [plan-protocol § 11](../plan-protocol/references/plan-protocol.md) — `exec-impl` self-check invariants (Codex consumes this worker's approved output as the executable contract)
+- [plan-protocol § 11](../plan-protocol/references/plan-protocol.md) — `exec-impl` self-check invariants (Codex consumes this worker's approved payload as the executable contract)
 - [plan-protocol § 13](../plan-protocol/references/plan-protocol.md) — delegation preflight (the Codex `test-review` wrapper must cite this worker contract verbatim before invocation)
