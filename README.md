@@ -19,7 +19,7 @@ Git-managed files in this repo must stay project-neutral. Do not commit specific
 - `templates/plan-root/` - empty PLAN_ROOT skeleton and generic `LEGACY_PATH_MAP.md`.
 - `scripts/install-skills.sh` - installs skills to Claude and Codex homes.
 - `scripts/bootstrap-plan-root.sh` - creates `plan/` skeleton in a target project.
-- `scripts/check-protocol-sync.sh` - compares Claude/Codex protocol reference SHA256 values.
+- `scripts/check-protocol-sync.sh` - validates the Claude/Codex protocol bundle mirrors and structured-output checkpoint regression guards.
 
 ## Prerequisites
 
@@ -199,7 +199,7 @@ Existing target skill is a real directory:
 Move it aside or inspect it manually. The install script will not overwrite non-symlink skill directories.
 
 Protocol sync mismatch:
-Edit one protocol reference, copy the exact final bytes to the other side, then rerun `scripts/check-protocol-sync.sh`.
+Keep the mirrored protocol bundle byte-identical across Claude and Codex: `plan-protocol.md`, `probes.md`, and the checkpoint schema files under `references/schemas/`. The sync check also fails on structured-output checkpoint transport regressions, including stale bare-stdout wording, missing wrapper invariant phrases, schema path invocation text, `failed-2` debug artifact wording, or top-level `$schema` in checkpoint schemas. Fix the reported file or phrase, copy the exact final bytes to the matching mirror when applicable, then rerun `scripts/check-protocol-sync.sh`.
 
 Target project has no `.gitignore`:
 `scripts/bootstrap-plan-root.sh` creates `<project-root>/.gitignore` with `plan/`.

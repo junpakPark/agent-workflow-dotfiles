@@ -19,7 +19,7 @@ English: [README.md](README.md)
 - `templates/plan-root/` - 빈 PLAN_ROOT skeleton과 generic `LEGACY_PATH_MAP.md`.
 - `scripts/install-skills.sh` - Claude/Codex home에 skills를 설치합니다.
 - `scripts/bootstrap-plan-root.sh` - target project에 `plan/` skeleton을 생성합니다.
-- `scripts/check-protocol-sync.sh` - Claude/Codex protocol reference SHA256 값을 비교합니다.
+- `scripts/check-protocol-sync.sh` - Claude/Codex protocol bundle mirror와 structured-output checkpoint 회귀 guard를 검증합니다.
 
 ## Prerequisites
 
@@ -194,7 +194,7 @@ Existing target skill is a real directory:
 직접 내용을 확인하거나 다른 위치로 옮깁니다. install script는 symlink가 아닌 skill directory를 overwrite하지 않습니다.
 
 Protocol sync mismatch:
-한쪽 protocol reference를 수정한 뒤 최종 bytes를 다른 쪽에 그대로 복사하고 `scripts/check-protocol-sync.sh`를 다시 실행합니다.
+Claude/Codex 양쪽의 mirrored protocol bundle을 byte-identical 상태로 유지해야 합니다: `plan-protocol.md`, `probes.md`, `references/schemas/` 아래 checkpoint schema 파일들. sync check는 structured-output checkpoint transport 회귀도 실패 처리합니다. 예: 오래된 bare-stdout 문구, 누락된 wrapper invariant 문구, schema path invocation 문구, `failed-2` debug artifact 문구, checkpoint schema의 top-level `$schema`. 보고된 파일이나 문구를 고치고, mirror가 필요한 파일은 최종 bytes를 반대쪽에 그대로 복사한 뒤 `scripts/check-protocol-sync.sh`를 다시 실행합니다.
 
 Target project has no `.gitignore`:
 `scripts/bootstrap-plan-root.sh`가 `<project-root>/.gitignore`를 만들고 `plan/`을 넣습니다.
