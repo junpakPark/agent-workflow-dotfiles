@@ -1,0 +1,51 @@
+.DS_Store
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+*.bak
+*.orig
+*.rej
+
+# Logs, history, and local runtime state
+*.log
+logs/
+logs*/
+log/
+history.*
+*.jsonl
+*.history
+sessions/
+runtime/
+
+# Local caches and generated plugin/runtime payloads
+.cache/
+cache/
+cache*/
+plugin-cache/
+plugins/cache/
+
+# Auth, secrets, and environment files
+auth.*
+*.token
+*.secret
+.env
+.env.*
+!.env.example
+
+# Local databases
+*.s[q]lite
+*.s[q]lite3
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+
+# Do not vendor live agent homes into this repo.
+.claude/
+.codex/
