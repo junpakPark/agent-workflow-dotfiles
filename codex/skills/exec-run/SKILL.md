@@ -1,13 +1,13 @@
 ---
 name: exec-run
-description: Codex execution-stage router for docs-plan v2. Use when the user asks to run or resume a locked parent plan, advance the next actionable child, recover child state from ## Status/Child Handoff Board, or execute one child through draft/test/implementation gates. Stops after one child or any protocol stop condition.
+description: Codex execution-stage router for docs-plan v2. Use when the user asks to run or resume a locked parent plan, advance the next actionable child, recover child state from ## Status/Child Handoff Board, or execute one child through draft/test/implementation gates. Runs the selected child through available stages, then stops after that child or a stop condition.
 ---
 
 # Exec Run
 
 ## Overview
 
-Run the execution stage for one docs-plan v2 child. This skill is the Codex execution router: it reads a locked parent plan, restores child state from `## Status` plus `## Child Handoff Board`, advances exactly one actionable child, then stops.
+Run the execution stage for one docs-plan v2 child. This skill is the Codex execution router: it reads a locked parent plan, restores child state from `## Status` plus `## Child Handoff Board`, advances exactly one actionable child through available missing stages, then stops.
 
 Read `../plan-protocol/references/plan-protocol.md` before routing.
 
@@ -34,13 +34,13 @@ approval.
 3. Run protocol checks: parent has `policy-locked`, Q2 passes, no other child is in progress, and the board is not ahead of `## Status`.
 4. Reconcile board drift only when `## Status` is ahead. If the board is ahead of `## Status`, stop and report a closure-violation candidate.
 5. Pick exactly one child. Do not start a second child in the same invocation.
-6. Run the next missing stage for that child:
-   - no child plan: use `exec-draft`, then append `child_<id>_draft_started`
-   - child draft exists but not locked: use `draft-review`; on approve append `child_<id>_plan_locked`
-   - plan locked but tests not written: append `child_<id>_tests_started`, use `exec-tests`, then `test-review`; on approve append `child_<id>_tests_written`
-   - tests written but implementation incomplete: append `child_<id>_implement_started`, use `exec-impl`; on success append `child_<id>_implement_completed`
-7. Stop immediately on any protocol stop condition: `decision-needed`, `plan-defect`, `recurrence-2nd` escalation, unsafe narrow-back, source-of-truth conflict, scope expansion, expensive/runtime command need, destructive action, external/manual gate, unexpected user-owned dirty diff, or runtime prerequisite gap.
-8. Stop after `child_<id>_implement_completed` and report the result. Do not enter the next child, `exec-code-quality`, closeout, or archive without a separate explicit request.
+6. Run missing stages in sequence for that child until a stop condition is reached. Do not stop merely because one transition marker was appended:
+   - no child plan: use `exec-draft`, then append `child_<id>_draft_started`, then run `draft-review`
+   - `draft-review` approve: append `child_<id>_plan_locked`, then run `exec-tests`
+   - after `exec-tests`: run `test-review`; on approve append `child_<id>_tests_written`, then run `exec-impl`
+   - `exec-impl` success: append `child_<id>_implement_completed`
+7. Stop only for these cases: protocol stop condition; checkpoint verdict is not approve; Claude worker unavailable, non-JSON, or invalid `child-checkpoint.v1`; unsafe narrow-back; source-of-truth conflict; scope expansion; expensive/runtime command need; destructive action approval; external/manual gate; unexpected user-owned dirty diff; runtime prerequisite gap; or `child_<id>_implement_completed` reached.
+8. When stopping after `child_<id>_implement_completed`, report the result. Do not start a second child, enter `exec-code-quality`, enter `finalize-closeout`, or enter `finalize-archive` without a separate explicit request.
 
 ## Status Writes
 
