@@ -25,15 +25,20 @@ move artifacts without explicit user approval.
 ## Workflow
 
 1. Gather parent path, child path, child id, git head, prior checkpoint JSON if any, and file hashes required by `child-checkpoint.v1`.
-2. Invoke Claude `draft-intent-worker` with a prompt that names the installed worker path (`${HOME}/.claude/skills/draft-intent-worker/SKILL.md`) and supplies the parent/child paths and prior findings. When spawning the Claude CLI, preserve the runtime identity environment required by plan-protocol § 13.1 (`HOME`, `PATH`, `SHELL`, `USER`, `LOGNAME` when available; derive missing `USER`/`LOGNAME` at runtime, never hard-code them). If the initial invocation fails because a restricted runtime blocks Claude auth/session lookup, perform at most one user-approved elevated retry in an auth-capable runtime with the same command, inputs, and environment. If the Claude CLI is unavailable, fails due to missing identity env, fails the retry, or returns non-JSON, stop without creating a checkpoint and report the blocker.
-3. Require stdout to be valid `child-checkpoint.v1` JSON with `checkpoint = plan_intent` and an `intent_map` ledger.
-4. Archive the JSON to `${current_check_root}/<child>/checkpoints/plan_intent.json`.
-5. Handle verdict:
+2. Run the plan-protocol § 13.2 Claude CLI capability preflight. Require `claude --help` to list `--json-schema` and `--output-format json`. If unsupported, stop as a runtime prerequisite blocker; do not retry and do not fall back to bare stdout.
+3. Invoke Claude `draft-intent-worker` with `claude -p --output-format json --json-schema <schema>`, using `../plan-protocol/references/schemas/child-checkpoint.plan_intent.schema.json` as the schema. The prompt names the installed worker path (`${HOME}/.claude/skills/draft-intent-worker/SKILL.md`) and supplies the parent/child paths and prior findings. When spawning the Claude CLI, preserve the runtime identity environment required by plan-protocol § 13.1 (`HOME`, `PATH`, `SHELL`, `USER`, `LOGNAME` when available; derive missing `USER`/`LOGNAME` at runtime, never hard-code them). If the initial invocation fails because a restricted runtime blocks Claude auth/session lookup, perform at most one user-approved elevated retry in an auth-capable runtime with the same command, inputs, and environment. If the Claude CLI is unavailable, fails due to missing identity env, or fails the retry, stop without creating a checkpoint and report the blocker.
+4. Parse stdout as a Claude Code result wrapper, not as the checkpoint payload. Require `is_error = false`, `terminal_reason = "completed"`, and top-level `.structured_output` to exist as an object. Wrapper `result`, stderr, debug logs, and raw stdout are not checkpoint artifacts.
+5. Validate only `.structured_output` as the checkpoint payload. It must validate against the `plan_intent` schema and satisfy plan-protocol § 7.1.d wrapper-side invariants: invocation identity fields match the request, recurrence nullability is coherent, recurrent `plan_intent` uses `recurrence_cause = contract`, `plan_intent` revise uses `revise_scope = child-plan`, `plan_intent` `governing_source` does not cite child sources, `governing_source` does not cite `code-quality-worker principle`, and the § 7.4 verdict / `next_action` / `revise_scope` matrix is satisfied.
+5a. Hard-reject schema-coercion or contradiction signals in free-text fields, excluding verbatim quote and evidence fields. Reject phrases include `cannot complete as requested`, `schema limitation`, `not in the schema`, and `forced by schema`.
+5b. On wrapper parse failure, `is_error = true`, non-completed `terminal_reason`, missing/non-object `.structured_output`, schema-invalid `.structured_output`, or wrapper-side invariant violation, stop without archiving and escalate per plan-protocol § 7.1.c. These failures are not worker verdicts and are not same-input checkpoint retries.
+5c. The wrapper MAY preserve failed attempts as debug-only artifacts named `${current_check_root}/<child>/checkpoints/plan_intent.failed-1.txt` and `plan_intent.failed-2.txt`, including exit code, parsed wrapper JSON or raw stdout, stderr trailing lines, and validation failures after redacting secrets. These files are never consumed as checkpoint artifacts.
+6. Archive the validated `.structured_output` object, and only that object, to `${current_check_root}/<child>/checkpoints/plan_intent.json`.
+7. Handle verdict:
    - `approve`: append `child_<id>_plan_locked`, update board, continue to `exec-tests` when under `exec-run`
    - `revise`: revise only the child plan, then repeat this checkpoint
    - `decision-needed`: stop; route to Claude `plan-reconcile`
    - `plan-defect`: stop; route to Claude `plan-reconcile`; only reconcile may write `child_<id>_plan_revision_required`
-6. For `recheck_loop_signal = recurrence-2nd`, follow protocol recurrence routing. For `plan_intent`, the cause is contract and routes to Claude `plan-reconcile`.
+8. For `recheck_loop_signal = recurrence-2nd`, follow protocol recurrence routing. For `plan_intent`, the cause is contract and routes to Claude `plan-reconcile`.
 
 ## Boundaries
 
