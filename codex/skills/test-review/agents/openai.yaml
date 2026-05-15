@@ -1,0 +1,4 @@
+openai:
+  display_name: "Test Review"
+  short_description: "Review child tests against acceptance"
+  default_prompt: "Use test-review to call Claude test-intent-worker, verify tests/manual verification against child acceptance rows, archive the JSON verdict, and handle the next execution step."

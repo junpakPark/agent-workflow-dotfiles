@@ -1,0 +1,4 @@
+interface:
+  display_name: "Exec Code Quality"
+  short_description: "Run docs-plan v2 code-quality gate."
+  default_prompt: "Use exec-code-quality to run code-quality-worker, write the code-quality result, and append the family-level quality marker."

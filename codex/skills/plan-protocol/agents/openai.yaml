@@ -1,0 +1,4 @@
+interface:
+  display_name: "Plan Protocol"
+  short_description: "Shared docs-plan v2 protocol contract."
+  default_prompt: "Use plan-protocol to check docs-plan v2 vocabulary, gates, status markers, handoff board rules, checkpoint schemas, and cross-orchestrator contracts."

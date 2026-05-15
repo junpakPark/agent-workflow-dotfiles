@@ -1,0 +1,4 @@
+interface:
+  display_name: "Exec Impl"
+  short_description: "Implement a docs-plan v2 child."
+  default_prompt: "Use exec-impl to implement only the approved test/manual-verification contract for one child and stop at completion."

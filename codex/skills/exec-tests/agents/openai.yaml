@@ -1,0 +1,4 @@
+interface:
+  display_name: "Exec Tests"
+  short_description: "Write tests for a docs-plan v2 child."
+  default_prompt: "Use exec-tests to translate a locked child acceptance contract into tests and manual verification entries."

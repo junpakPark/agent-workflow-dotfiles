@@ -1,0 +1,4 @@
+openai:
+  display_name: "Plan Review Worker"
+  short_description: "Emit per-lens findings on local plans"
+  default_prompt: "Emit F-NNN + severity findings for the given local plan document only. Honor caller-provided review scope/severity, but do not choose workflow state, triage, edit, or write artifacts."

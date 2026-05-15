@@ -1,0 +1,4 @@
+interface:
+  display_name: "Finalize Archive"
+  short_description: "Archive a docs-plan v2 family after approval."
+  default_prompt: "Use finalize-archive to prepare or execute archive only after explicit user approval."

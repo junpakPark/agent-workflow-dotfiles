@@ -1,0 +1,4 @@
+interface:
+  display_name: "Finalize Closeout"
+  short_description: "Close out a docs-plan v2 family."
+  default_prompt: "Use finalize-closeout to check final docs/policy/roadmap sync and decide archive readiness."

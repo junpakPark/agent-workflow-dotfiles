@@ -1,0 +1,4 @@
+interface:
+  display_name: "Exec Run"
+  short_description: "Run the next docs-plan v2 execution step."
+  default_prompt: "Use exec-run to resume a docs-plan v2 parent and advance exactly one actionable child through execution gates."

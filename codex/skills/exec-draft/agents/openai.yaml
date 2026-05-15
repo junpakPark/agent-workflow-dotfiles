@@ -1,0 +1,4 @@
+interface:
+  display_name: "Exec Draft"
+  short_description: "Draft a child plan for docs-plan v2 execution."
+  default_prompt: "Use exec-draft to create or revise one Codex-owned child plan from a locked parent plan."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Finalize Run"
+  short_description: "Route docs-plan v2 finalization."
+  default_prompt: "Use finalize-run to choose finalize-closeout or finalize-archive after code-quality-ready."

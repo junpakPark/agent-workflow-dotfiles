@@ -1,0 +1,4 @@
+interface:
+  display_name: "Draft Review"
+  short_description: "Run child draft intent review."
+  default_prompt: "Use draft-review to call Claude draft-intent-worker and handle its JSON verdict for a child plan."
