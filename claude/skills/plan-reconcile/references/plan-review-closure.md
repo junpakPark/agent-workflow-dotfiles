@@ -214,31 +214,41 @@ Summary (the SKILL.md is authoritative — these are pointers):
 
 ## Triage Input Forms
 
-Plan review reconcile triage accepts two finding shapes from a review artifact's `## Codex output`:
+### Canonical v2 input (the only shape produced by the docs-plan v2 wrapper)
 
-- **raw F-NNN** — a single-lens entry, e.g.:
+In docs-plan v2 with the Codex CLI structured-output transport, the Codex `plan-review-worker` emits a `parent-plan-review.v1` JSON payload (validated against the shared schema by `codex exec --output-schema`); the Claude `plan-review` wrapper then **deterministically renders that JSON into the `## Codex output` F-NNN Markdown without merging across lenses**. Every entry in `## Codex output` is therefore a **raw single-lens F-NNN block** with exactly the five mandatory sub-field lines below (in this order) — the shape below is the *only* shape v2 produces and matches `plan-review/SKILL.md` § "Structured-JSON → F-NNN Markdown Rendering" rule 4 verbatim. An entry missing any of these five sub-fields is rejected as a Category B malformed-v2 artifact (see `plan-review/SKILL.md` § "Bad Artifact Rejection (no-op adversarial + malformed v2)" § Category B).
 
-  ```
-  #### F-001 [blocking] <issue>
-  - source lens: Implementer
-  - issue: ...
-  - evidence: ...
-  - suggested action: ...
-  ```
+```
+#### F-001 [blocking] <issue>
+- source lens: Implementer
+- issue: ...
+- why it matters: ...
+- evidence: ...
+- suggested action: ...
+```
 
-- **normalized F-NNN** — multiple lens observations of the same issue merged in `plan-review` post-processing, e.g.:
+Per `plan-review/SKILL.md` § "Structured-JSON → F-NNN Markdown Rendering" rule 6: "The rendering does NOT merge across lenses." Cross-lens normalization (merge / split / parent-escalate / closure-related annotation) is `plan-review`'s post-processing responsibility and is surfaced in the artifact's **optional `## Normalized findings` section**, which is **display-only**. Reconcile MUST consume `## Codex output`, NOT `## Normalized findings`. The wrapper-rendered `## Codex output` is the sole canonical reconcile input in v2.
 
-  ```
-  #### F-001 [blocking] <issue>
-  - contributing lenses: implementer, maintainer
-  - issue: ...
-  - evidence: ...
-  - suggested action: ...
-  ```
+In v2, reconcile triage therefore:
 
-Reconcile must accept either shape; **mixed input** within a single artifact is also legal. Triage classifies each entry (`accept` / `reject` / `need-user-decision`), merges duplicates that the reviewer did not already merge (rare with normalized input), and follows the artifact-type accept action defined in `SKILL.md`.
+- Reads only `## Codex output`;
+- Treats every entry as a raw single-lens F-NNN block (the shape above);
+- Performs cross-lens merging itself at triage time when two single-lens entries clearly describe the same evidence anchor (i.e., reconcile does the merging, not the worker, and not the wrapper renderer);
+- Ignores `## Normalized findings` entirely for triage decisions (the wrapper guarantees that, if `## Normalized findings` disagrees with `## Codex output`, the rendering wins and `## Normalized findings` is regenerated — see `plan-review/SKILL.md` § "Artifact Layout").
 
-The `plan-review-worker` is **not modified** in Parent Plan 1 — it keeps emitting raw F-NNN. Normalization is `plan-review`'s post-processing responsibility (Child C — out of scope for this reference).
+### Legacy `normalized F-NNN` shape (pre-v2 artifacts only — NOT produced by v2)
+
+Some archived pre-v2 artifacts (and any artifact still being parsed for migration purposes) may carry a merged shape with a `contributing lenses:` field instead of `source lens:`, e.g.:
+
+```
+#### F-001 [blocking] <issue>
+- contributing lenses: implementer, maintainer
+- issue: ...
+- evidence: ...
+- suggested action: ...
+```
+
+This shape is **legacy-only**. The v2 wrapper does NOT emit this shape into `## Codex output`. If reconcile encounters a `contributing lenses:` line in a v2 artifact, that artifact is malformed and triage stops as a contract violation (it matches Category B — Malformed v2 `## Codex output` shape signatures — under `plan-review/SKILL.md` § "Bad Artifact Rejection (no-op adversarial + malformed v2)", and the same atomic-archive-then-rerun recovery applies; the v2 deterministic rendering contract guarantees one `source lens:` line per F-NNN entry, not a `contributing lenses:` aggregate). Legacy-shape tolerance exists only for reading **pre-v2 archived** artifacts during migration and MUST NOT be a path for accepting merged content from current v2 review runs.
 
 ## Cross-File Drift Rule
 
@@ -248,7 +258,7 @@ Drift between `SKILL.md` and this reference is itself a closure violation (treat
 
 ## Material Change → Delta Review (Caller Contract)
 
-The seven material-change areas, the obligation to re-invoke `plan-review` with explicit `mode` + `delta_scope` when any area changed, the prohibition on reconciler self-judgment skipping the re-review, the `recovery_mode` parameter (`auto | manual`, caller-side explicit passing for all three keys including `recovery_mode`, no default fallthrough, no silent normalization of missing keys), the auto recovery four-step path, the manual recovery path (caller / operator explicit invocation only — no automatic transition from auto), and the retry artifact policy = archive (move all three guarded files `<basename>-review.md` / `<basename>-review.md.pending` / `<basename>-review.failed.md` to `<check_dir>/archive/<cycle-id>/` before re-invocation; partial archive is forbidden; attempt-suffixed paths are not used) live in [`../SKILL.md`](../SKILL.md) § "Material Change → Delta Review (Caller Contract)" + § `recovery_mode` parameter + § Retry artifact policy. This reference does not redefine those rules. Worker-side scope-aware behavior (mode acceptance, `delta_scope` consumption, `Delta scope missing or insufficient` finding, retry archive expectation at re-invocation) lives in [`../../plan-review/SKILL.md`](../../plan-review/SKILL.md) § "Caller-side scope-aware contract" and § '"Delta scope missing or insufficient" handling'. Drift between any of those is a closure violation.
+The seven material-change areas, the obligation to re-invoke `plan-review` with explicit `review_scope` + `review_severity` + `delta_scope` (the v2 split-key contract — the legacy single-key `mode` is deprecated; `delta_scope` is required only when `review_scope = "delta"`) when any area changed, the prohibition on reconciler self-judgment skipping the re-review, the `recovery_mode` parameter (`auto | manual`, caller-side explicit passing for all four mandatory keys including `recovery_mode`, no default fallthrough, no silent normalization of missing keys), the auto recovery four-step path, the manual recovery path (caller / operator explicit invocation only — no automatic transition from auto), and the retry artifact policy = archive (move all three guarded files `<basename>-review.md` / `<basename>-review.md.pending` / `<basename>-review.failed.md` to `<check_dir>/archive/<cycle-id>/` before re-invocation; partial archive is forbidden; attempt-suffixed paths are not used) live in [`../SKILL.md`](../SKILL.md) § "Material Change → Delta Review (Caller Contract)" + § `recovery_mode` parameter + § Retry artifact policy. This reference does not redefine those rules. Wrapper-side (Claude `plan-review`) scope-aware behavior — the structured prefix (4 mandatory keys plus conditional `delta_scope`; full-scope calls emit 4 keys on the wire, delta-scope calls emit 5), caller-side preflight rejection of malformed `review_scope` / `review_severity` / `delta_scope` combinations, and the archive-then-rerun expectation at re-invocation — lives in [`../../plan-review/SKILL.md`](../../plan-review/SKILL.md) § "Focus Text Prefix Contract" (preflight rejects) and § "Caller-side Scope-aware Contract" (reconcile-owned `delta_scope` derivation). Worker-side scope-aware behavior — directive parsing of the structured prefix (4 mandatory keys plus conditional `delta_scope`), `delta_scope` canonical encoding consumption, and the emission of a `Delta scope missing or insufficient` finding when `review_scope = "delta"` is sent without a parseable `delta_scope` — lives in the Codex worker reference at `codex/skills/plan-review-worker/references/review.md` § "Focus text structured prefix" / § "Review Modes". Drift between any of those is a closure violation.
 
 ## M-A2 material change automated classifier (Child A — source of truth: SKILL.md)
 

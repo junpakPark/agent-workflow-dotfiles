@@ -8,6 +8,7 @@ files=(
   "plan-protocol/references/probes.md"
   "plan-protocol/references/schemas/child-checkpoint.plan_intent.schema.json"
   "plan-protocol/references/schemas/child-checkpoint.test_intent.schema.json"
+  "plan-protocol/references/schemas/parent-plan-review.v1.schema.json"
 )
 
 failed=0
@@ -43,8 +44,10 @@ done
 schema_files=(
   "${repo_root}/claude/skills/plan-protocol/references/schemas/child-checkpoint.plan_intent.schema.json"
   "${repo_root}/claude/skills/plan-protocol/references/schemas/child-checkpoint.test_intent.schema.json"
+  "${repo_root}/claude/skills/plan-protocol/references/schemas/parent-plan-review.v1.schema.json"
   "${repo_root}/codex/skills/plan-protocol/references/schemas/child-checkpoint.plan_intent.schema.json"
   "${repo_root}/codex/skills/plan-protocol/references/schemas/child-checkpoint.test_intent.schema.json"
+  "${repo_root}/codex/skills/plan-protocol/references/schemas/parent-plan-review.v1.schema.json"
 )
 
 for schema_file in "${schema_files[@]}"; do
@@ -56,6 +59,62 @@ for schema_file in "${schema_files[@]}"; do
 
   if jq -e 'has("$schema")' "${schema_file}" >/dev/null; then
     echo "schema metadata regression: ${schema_file}: top-level \$schema"
+    failed=1
+  fi
+done
+
+parent_review_schema_files=(
+  "${repo_root}/claude/skills/plan-protocol/references/schemas/parent-plan-review.v1.schema.json"
+  "${repo_root}/codex/skills/plan-protocol/references/schemas/parent-plan-review.v1.schema.json"
+)
+
+parent_review_forbidden_keywords=(
+  "allOf"
+  "anyOf"
+  "oneOf"
+  "not"
+  "if"
+  "then"
+  "else"
+  "const"
+)
+
+for schema_file in "${parent_review_schema_files[@]}"; do
+  for keyword in "${parent_review_forbidden_keywords[@]}"; do
+    if jq -e --arg keyword "${keyword}" 'any(.. | objects; has($keyword))' "${schema_file}" >/dev/null; then
+      echo "parent review schema structured-output keyword regression: ${schema_file}: ${keyword}"
+      failed=1
+    fi
+  done
+
+  if ! jq -e '
+    (.properties.schema_version? // null) as $schema_version
+    | ($schema_version | type == "object")
+    and (($schema_version | keys) == ["enum", "type"])
+    and ($schema_version.type == "string")
+    and ($schema_version.enum == ["parent-plan-review.v1"])
+    and ($schema_version | has("const") | not)
+  ' "${schema_file}" >/dev/null; then
+    echo "parent review schema_version singleton enum regression: ${schema_file}"
+    failed=1
+  fi
+
+  missing_required="$(
+    jq -r '
+      def property_object_paths:
+        [], paths(objects | select(has("properties")));
+
+      property_object_paths as $path
+      | getpath($path) as $object
+      | select(($object | type) == "object" and ($object | has("properties")))
+      | (($object.properties | keys_unsorted) - ($object.required // [])) as $missing
+      | select(($missing | length) > 0)
+      | "\((if ($path | length) == 0 then "." else ($path | map(tostring) | join(".")) end)): \($missing | join(","))"
+    ' "${schema_file}"
+  )"
+  if [[ -n "${missing_required}" ]]; then
+    echo "parent review schema structured-output required regression: ${schema_file}"
+    echo "${missing_required}"
     failed=1
   fi
 done

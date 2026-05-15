@@ -1,0 +1,173 @@
+{
+  "$id": "parent-plan-review.v1.schema.json",
+  "title": "parent-plan-review.v1 Full Panel review final JSON payload",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "review_scope",
+    "review_severity",
+    "delta_scope",
+    "closure_map_path",
+    "recovery_mode",
+    "reviewed_inputs",
+    "lens_results",
+    "findings"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": ["parent-plan-review.v1"]
+    },
+    "review_scope": {
+      "type": "string",
+      "enum": ["full", "delta"]
+    },
+    "review_severity": {
+      "type": "string",
+      "enum": ["full-panel", "blocking-only"]
+    },
+    "delta_scope": {
+      "type": ["string", "null"]
+    },
+    "closure_map_path": {
+      "type": "string",
+      "pattern": "^/"
+    },
+    "recovery_mode": {
+      "type": "string",
+      "enum": ["auto", "manual"]
+    },
+    "reviewed_inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "git_head",
+        "parent_plan_path",
+        "parent_plan_sha256",
+        "closure_map_sha256",
+        "reviewed_files"
+      ],
+      "properties": {
+        "git_head": {
+          "type": "string"
+        },
+        "parent_plan_path": {
+          "type": "string",
+          "pattern": "^/"
+        },
+        "parent_plan_sha256": {
+          "type": "string"
+        },
+        "closure_map_sha256": {
+          "type": ["string", "null"]
+        },
+        "reviewed_files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "lens_results": {
+      "type": "array",
+      "description": "Exactly seven lens entries, one per canonical lens. Lens uniqueness and status-dependent nullability are wrapper invariants.",
+      "minItems": 7,
+      "maxItems": 7,
+      "items": {
+        "$ref": "#/$defs/lens_result"
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/finding"
+      }
+    }
+  },
+  "$defs": {
+    "lens_name": {
+      "type": "string",
+      "enum": [
+        "cto-problem-definition",
+        "implementer",
+        "operator",
+        "qa",
+        "maintainer",
+        "docs-usability",
+        "risk-rollout"
+      ]
+    },
+    "lens_result": {
+      "type": "object",
+      "description": "Required-nullable per-lens review outcome. For status=findings, finding_ids is a non-null array and reason is null. For status=no_findings, finding_ids and reason are null. For status=n_a, finding_ids is null and reason is non-null. The wrapper enforces these semantics.",
+      "additionalProperties": false,
+      "required": ["lens", "status", "finding_ids", "reason"],
+      "properties": {
+        "lens": {
+          "$ref": "#/$defs/lens_name"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["findings", "no_findings", "n_a"]
+        },
+        "finding_ids": {
+          "type": ["array", "null"],
+          "items": {
+            "type": "string",
+            "pattern": "^F-[0-9]{3}$"
+          }
+        },
+        "reason": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "lens",
+        "severity",
+        "title",
+        "issue",
+        "why_it_matters",
+        "evidence",
+        "suggested_action"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^F-[0-9]{3}$"
+        },
+        "lens": {
+          "$ref": "#/$defs/lens_name"
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["blocking", "decision-needed", "non-blocking"]
+        },
+        "title": {
+          "type": "string"
+        },
+        "issue": {
+          "type": "string"
+        },
+        "why_it_matters": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "suggested_action": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

@@ -2,15 +2,68 @@
 
 ## Contents
 
-- [Output Contract](#output-contract)
+- [Output Transport](#output-transport)
+- [Output Contract (shape semantics)](#output-contract-shape-semantics)
 - [Severity](#severity)
 - [Review Modes](#review-modes)
 - [Focus text structured prefix](#focus-text-structured-prefix)
 - [Lenses](#lenses)
 
-## Output Contract
+## Output Transport
 
-Return the seven lens sections in this order:
+Two transports exist; the active transport is determined by how the Claude `plan-review` wrapper invokes Codex.
+
+### Structured-output transport (canonical for parent Full Panel review)
+
+The wrapper invokes `codex exec --sandbox read-only --output-schema <schema> -o <output.json> - < <prompt-file>`. When `--output-schema` is bound to `parent-plan-review.v1`, the Codex runtime enforces that the final response is a single JSON object validating against the schema.
+
+In this mode:
+
+- The final response is the `parent-plan-review.v1` JSON object **only**. No Markdown around it, no `## CTO / problem-definition review` headings as final answer, no `_N/A - <reason>` line outside the JSON, no F-NNN string in final-answer text.
+- The schema fields map 1:1 to the per-finding shape in § Output Contract below. The F-NNN Markdown shape is the wrapper's deterministic rendering of the JSON; do **not** emit it yourself as the final response in this mode.
+- The schema uses a required-nullable wire shape for fields that are conditionally absent in the logical contract: always include `delta_scope`, `reviewed_inputs.closure_map_sha256`, `lens_results[].finding_ids`, and `lens_results[].reason`; use `null` when the value is not logically present.
+- The wrapper enforces lens uniqueness, status-specific nullability, finding-id uniqueness, echoed-field consistency, and reviewed-inputs hashes as wrapper invariants after schema validation. Drift on any of these is a wrapper-side rejection (`.failed.md`). Echo wrapper-provided provenance exactly; do not coerce substantive findings to satisfy the schema.
+- Schema-coercion or contradiction phrases (`cannot complete as requested`, `schema limitation`, `not in the schema`, `forced by schema`, `Verdict: approve / no material findings`, `code diff`) anywhere in the JSON (other than verbatim `findings[].evidence` quoting plan text) are wrapper-side rejections.
+
+#### Wrapper-computed provenance block
+
+Canonical structured-output prompts include a wrapper-computed provenance block separate from the structured directive prefix. The directive prefix controls review behavior; the provenance block controls exact echo fields. The provenance block contains:
+
+- `expected_schema_version`
+- `expected_git_head`
+- `expected_parent_plan_path`
+- `expected_parent_plan_sha256`
+- `expected_closure_map_path`
+- `expected_closure_map_sha256`
+- `expected_reviewed_files`
+
+Structured-output provenance mapping:
+
+| JSON field | Source |
+|---|---|
+| `schema_version` | exact echo of `expected_schema_version` |
+| `closure_map_path` | directive prefix `closure_map_path`; it must name the same host file as `expected_closure_map_path` |
+| `reviewed_inputs.git_head` | exact echo of `expected_git_head` |
+| `reviewed_inputs.parent_plan_path` | exact echo of `expected_parent_plan_path` |
+| `reviewed_inputs.parent_plan_sha256` | exact echo of `expected_parent_plan_sha256` |
+| `reviewed_inputs.closure_map_sha256` | exact echo of `expected_closure_map_sha256` |
+| `reviewed_inputs.reviewed_files` | exact echo of `expected_reviewed_files` |
+
+Do not compute, infer, or guess any provenance value. Do not run git commands to discover `git_head`. Do not hash files to fill `parent_plan_sha256` or `closure_map_sha256`. Do not derive `reviewed_files` from the files you happened to inspect. In canonical v2, `closure_map_path` points at the parent plan, so `closure_map_sha256` is the SHA-256 of the parent-plan host file, not the extracted `## Closure map` section, and `expected_closure_map_sha256` equals `expected_parent_plan_sha256`.
+
+#### Structured-output evidence boundary
+
+Canonical structured-output parent Full Panel review is parent-plan-only for local file reads. The worker may read the parent plan named by `closure_map_path` / `expected_parent_plan_path` and inline caller-provided prompt or provenance context. Do not open code, tests, root docs, ADRs, child plans, or other repo files to validate parent-plan claims.
+
+When the parent plan cites an external path, treat that path as a parent-plan-cited reference unless the caller included the referenced content inline in the prompt. If a lens question cannot be answered from the parent plan and inline prompt context, emit a finding for missing or unverifiable source evidence instead of validating by reading outside the parent plan. `reviewed_inputs.reviewed_files` remains the exact wrapper-provided echo and must not be expanded to match files you inspected.
+
+### Legacy free-form transport (no schema bound)
+
+When the wrapper invokes Codex without `--output-schema`, fall back to the Markdown F-NNN format documented under § Output Contract. This mode is retained for ad-hoc inspections and bootstrap-territory calls; canonical parent Full Panel review in docs-plan v2 is structured-output only.
+
+## Output Contract (shape semantics)
+
+The seven lenses in canonical order:
 
 1. CTO / problem-definition review
 2. Implementer review
@@ -20,23 +73,41 @@ Return the seven lens sections in this order:
 6. Docs usability review
 7. Risk / rollout review
 
-Each material finding must use this exact shape:
+Per-finding shape (same semantics in both transports; structured-output encodes these as JSON fields, legacy free-form renders these as Markdown):
 
 ```markdown
 #### F-NNN [severity] <one-line title>
 - source lens: <one lens name>
 - issue: <what is unclear, incomplete, unsafe, or contradictory>
 - why it matters: <practical effect>
-- evidence: <file:line, quoted plan heading, code path, doc path, or explicit missing evidence>
+- evidence: <parent-plan line/heading, inline caller context, parent-plan-cited external path marked as unverified, or explicit missing evidence>
 - suggested action: <one short action for the caller>
 ```
 
-Rules:
+Schema field mapping (structured-output mode — see `parent-plan-review.v1.schema.json`):
 
-- Number findings in source-doc order across the whole output, starting at `F-001`.
+| Markdown line | JSON field |
+|---|---|
+| `F-NNN` token | `findings[].id` (`^F-[0-9]{3}$`) |
+| `[severity]` | `findings[].severity` (`blocking` \| `decision-needed` \| `non-blocking`) |
+| source lens display name | `findings[].lens` (kebab-case token: `cto-problem-definition`, `implementer`, `operator`, `qa`, `maintainer`, `docs-usability`, `risk-rollout`) |
+| `<one-line title>` | `findings[].title` |
+| `issue:` | `findings[].issue` |
+| `why it matters:` | `findings[].why_it_matters` |
+| `evidence:` | `findings[].evidence` (array of strings) |
+| `suggested action:` | `findings[].suggested_action` |
+| `_N/A - <reason>` for a whole lens | `lens_results[]` entry with `status="n_a"`, `finding_ids=null`, `reason=<reason>` |
+| lens reviewed but no finding (legacy emits empty section or `_(no material findings)_`) | `lens_results[]` entry with `status="no_findings"`, `finding_ids=null`, `reason=null` |
+| lens reviewed with ≥1 finding | `lens_results[]` entry with `status="findings"`, `finding_ids = [<all F-NNN ids whose lens equals this lens>]`, `reason=null` |
+
+Rules (both transports):
+
+- Number findings in source-doc order across the whole output, starting at `F-001`. Finding ids are unique across the array.
 - Use exactly one severity: `blocking`, `decision-needed`, or `non-blocking`.
 - Keep duplicate observations from different lenses separate when they come from different lens concerns.
-- Use `_N/A - <reason>` for any lens with no applicable finding.
+- In structured-output mode: every lens appears exactly once in `lens_results[]` with one of the three schema-enumerated statuses — `findings` (≥1 finding emitted; `finding_ids` non-null array, `reason=null`), `no_findings` (lens reviewed, zero findings; `finding_ids=null`, `reason=null`), or `n_a` (lens not applicable; `finding_ids=null`, `reason` non-null). The schema enforces the always-present shape; the wrapper enforces status-dependent nullability and 7-element exact-set lens uniqueness post-schema.
+- In structured-output mode: evidence must not imply the worker opened a local file outside the parent plan unless that content was supplied inline in the prompt.
+- In legacy free-form mode: use `_N/A - <reason>` only for a non-applicable lens. For a reviewed lens with zero findings, leave the section empty or write `_(no material findings)_` for readability.
 - Do not include pass/fail status, artifact instructions, or workflow routing.
 
 ## Severity
@@ -70,7 +141,7 @@ The caller owns scope and severity selection. The invocation contract uses two s
 - Emit only `decision-needed` and `blocking` findings; suppress `non-blocking` entirely under this directive.
 - Do not emit wording, readability, stale-header, or maintainability findings that are only `non-blocking`.
 - Do not emit captured-obligation details that the caller can route to write-tests or implement-code. Omission is not a resolved/unresolved judgment.
-- Still include all seven lens sections, using `_N/A - <reason>` where there is no emitted finding.
+- Still cover all seven lenses. In structured-output mode, include every lens in `lens_results[]`; use `status="no_findings"` for a reviewed lens with no emitted blocking / decision-needed finding, and `status="n_a"` only when the lens is not applicable. In legacy free-form mode, include all seven lens sections and use `_N/A - <reason>` only for a non-applicable lens.
 
 ### `review_scope = delta`
 
@@ -118,9 +189,9 @@ User focus: <<<plan-review>>> review_scope=delta review_severity=blocking-only d
 User focus: <<<plan-review>>> review_scope=full review_severity=blocking-only closure_map_path=<project-root>/plan/families/parent.md recovery_mode=manual
 ```
 
-### 5-key prefix contract
+### Structured directive prefix contract (4 mandatory keys + conditional `delta_scope`)
 
-The structured prefix has five keys. Four are required whenever the prefix is present (`review_scope`, `review_severity`, `closure_map_path`, `recovery_mode`). `delta_scope` is required only when `review_scope=delta` and forbidden when `review_scope=full`.
+The structured directive prefix has five contract keys. Four are required whenever the prefix is present (`review_scope`, `review_severity`, `closure_map_path`, `recovery_mode`). `delta_scope` is required only when `review_scope=delta` and forbidden when `review_scope=full`. Provenance values are not directive-prefix keys; they live in the wrapper-computed provenance block described in § Output Transport.
 
 | key | values | role |
 |---|---|---|
@@ -152,9 +223,11 @@ The structured prefix has five keys. Four are required whenever the prefix is pr
 3. **Context-only usage**: the closure map is consumed as context for spotting closure-related contradictions; the worker does NOT triage closure violations vs. remaining obligations (caller-side `plan-reconcile` owns triage).
 4. **Missing / unreadable error handling — no silent ignore**: when the path is missing, non-absolute, unreadable, or lacks `## Closure map`, the worker emits an explicit warning finding (e.g., `closure_map_path file missing` produces a missing-file warning finding; `closure_map_path file unreadable` produces an unreadable-file warning finding); the review itself proceeds without closure context.
 
+Semantic behavior and provenance behavior are separate. For semantic review, read `closure_map_path` and extract only `## Closure map`. For provenance, echo `expected_closure_map_sha256` from the wrapper-computed provenance block; do not hash the extracted section and do not hash the file yourself.
+
 ### Prefix-absent fallback (worker boundary — PRC-D-08 cross-reference)
 
-- **Prefix present**: substring search inside the companion-wrapped prompt finds `<<<plan-review>>>` → parse the 5-key contract + apply the directives above.
+- **Prefix present**: substring search inside the companion-wrapped prompt finds `<<<plan-review>>>` → parse the structured directive prefix (4 mandatory keys plus conditional `delta_scope`) + apply the directives above.
 - **Prefix absent**: substring search returns no match → fall back to **legacy free-form prose** processing (the review proceeds against the focus text as ordinary natural-language prose; prefix absence itself emits no finding).
 - **The worker does NOT decide territory** (active vs bootstrap):
   - The worker does not consume audit markers, status-trail entries, or the `child_B_implement_completed` parent plan entry as input.
@@ -170,7 +243,7 @@ The `review_severity` directive and the P2-D-20 captured-obligation rule (§ Sev
 
 ### CTO / Problem-Definition
 
-Explicitly check all five CTO checklist items. A checklist item is sufficiently covered only when the answer is supported by evidence in the plan body, cited code/tests, or root tracked docs. If answering an item requires inference beyond documented evidence, treat it as a material gap and emit an F-NNN finding.
+Explicitly check all five CTO checklist items. In structured-output mode, a checklist item is sufficiently covered only when the answer is supported by evidence in the parent plan body or inline caller-provided context. Parent-plan citations to code, tests, root docs, or ADRs may be cited as unverified plan claims, but do not open those files. If answering an item requires inference or external validation beyond the parent plan and inline context, treat it as a material gap and emit an F-NNN finding.
 
 - User scenario: identify what user, operator, or external trigger raises the problem this plan addresses.
 - Case completeness: check whether all relevant cases are listed and whether any missing case could change the work.
@@ -182,11 +255,10 @@ For each checklist item:
 
 - If the item has a material gap, emit an F-NNN finding and name the checklist item in the title or issue.
 - If the item is sufficiently covered with adequate evidence, do not emit a finding for that item.
-- If all five items are sufficiently covered, end the CTO / problem-definition section with this exact line:
-
-```text
-_N/A - all five CTO checklist items are covered with adequate evidence
-```
+- If all five items are sufficiently covered, treat the CTO / problem-definition lens as reviewed with zero findings, not as non-applicable:
+  - In structured-output mode, set that lens entry to `status="no_findings"`, `finding_ids=null`, and `reason=null`.
+  - In legacy free-form mode, leave the section empty or write `_(no material findings)_` for readability.
+  - Do not use `_N/A - <reason>` for this case; `n_a` is reserved for a lens that is not applicable to the plan.
 
 When CTO / problem-definition and another lens flag the same evidence, both lenses should emit their own F-NNN finding. The caller merges across lenses by shared evidence anchor; do not pre-merge findings in worker output.
 
@@ -198,7 +270,7 @@ When CTO / problem-definition and another lens flag the same evidence, both lens
 ### Operator
 
 - Check operational commands, stop gates, expensive operational/pipeline commands, and user-confirmation gates.
-- Confirm the plan does not reopen policy already locked in the repository operating-policy document, when one exists.
+- Confirm the plan does not appear to reopen policy it identifies as already locked in the repository operating-policy document; in structured-output mode, evaluate the parent plan's cited policy relationship without opening the policy file unless the caller supplied its contents inline.
 
 ### QA
 
@@ -207,7 +279,7 @@ When CTO / problem-definition and another lens flag the same evidence, both lens
 
 ### Maintainer
 
-- Check source precedence: code/tests, root docs, ADRs, then local planning docs.
+- Check whether the parent plan establishes and cites source precedence in the expected order: code/tests, root docs, ADRs, then local planning docs. In structured-output mode, do not read those sources directly; flag missing or unverifiable source evidence when the plan does not provide enough context.
 - Flag risks to architectural boundaries or repository operating rules.
 
 ### Docs Usability
