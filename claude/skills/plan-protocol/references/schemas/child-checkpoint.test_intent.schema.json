@@ -1,5 +1,4 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "child-checkpoint.test_intent.schema.json",
   "title": "child-checkpoint.v1 test_intent structured_output payload",
   "type": "object",

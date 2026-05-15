@@ -42,6 +42,108 @@ Conclusion: the checkpoint payload is exposed at top-level
 `structured_output`. Wrapper `result`, stderr, and debug text are not
 checkpoint artifacts.
 
+## Schema Argument Form Probe
+
+Follow-up captured on 2026-05-15 after a downstream run reported a
+Claude result wrapper without `structured_output` when using a schema
+file path.
+
+File-path command shape:
+
+```sh
+claude -p --output-format json --json-schema /private/tmp/claude_json_schema_path_probe.json --tools "" --no-session-persistence 'Return structured output with ok true.'
+```
+
+Observed result: bounded with a 20-second `alarm`; no Claude result
+wrapper was emitted before timeout and the process exited `142`.
+
+Schema JSON string command shape:
+
+```sh
+schema_json="$(jq -c . /private/tmp/claude_json_schema_path_probe.json)"
+claude -p --output-format json --json-schema "${schema_json}" --tools "" --no-session-persistence 'Return structured output with ok true.'
+```
+
+Observed relevant wrapper fields:
+
+```json
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": false,
+  "result": "ok",
+  "structured_output": {
+    "ok": true
+  },
+  "terminal_reason": "completed"
+}
+```
+
+Conclusion: wrappers must pass the schema JSON content to
+`--json-schema`, not the schema file path. Schema files remain the
+canonical source of truth, but wrappers must load them with `jq -c`
+before invoking Claude CLI.
+
+## Schema Metadata Probe
+
+Follow-up captured on 2026-05-15 after the schema JSON string invocation
+still produced a Claude wrapper without `structured_output` for the full
+`test_intent` schema.
+
+Actual `test_intent` schema with top-level `$schema`:
+
+```sh
+schema_json="$(jq -c . codex/skills/plan-protocol/references/schemas/child-checkpoint.test_intent.schema.json)"
+claude -p --output-format json --json-schema "${schema_json}" --tools "" --no-session-persistence '<minimal compliant test_intent payload prompt>'
+```
+
+Observed relevant wrapper fields:
+
+```json
+{
+  "is_error": false,
+  "terminal_reason": "completed",
+  "result": "```json\n{ ... checkpoint JSON ... }\n```"
+}
+```
+
+No top-level `structured_output` field was present.
+
+The same actual schema with only top-level `$schema` removed:
+
+```sh
+schema_json="$(jq -c 'del(."$schema")' codex/skills/plan-protocol/references/schemas/child-checkpoint.test_intent.schema.json)"
+claude -p --output-format json --json-schema "${schema_json}" --tools "" --no-session-persistence '<minimal compliant test_intent payload prompt>'
+```
+
+Observed relevant wrapper fields:
+
+```json
+{
+  "is_error": false,
+  "terminal_reason": "completed",
+  "result": "Structured output submitted successfully.",
+  "structured_output": {
+    "schema_version": "child-checkpoint.v1",
+    "checkpoint": "test_intent",
+    "verdict": "approve"
+  }
+}
+```
+
+Targeted metadata probes:
+
+| schema metadata | result |
+|---|---|
+| top-level `$schema` only | no top-level `structured_output`; wrapper `result` contained `{"ok": true}` |
+| top-level `$id` only | top-level `structured_output` present |
+| top-level `title` only | top-level `structured_output` present |
+| `$defs` + `$ref` | top-level `structured_output` present |
+
+Conclusion: the runtime schema files used with Claude CLI structured
+output must omit top-level `$schema`. `$id`, `title`, `$defs`, and
+`$ref` may remain.
+
 ## Schema Dialect Probe
 
 Command:
@@ -101,3 +203,9 @@ Supported keywords confirmed by this probe:
 Schema files may therefore use these shape and enum constraints. The
 wrapper still owns invocation invariants and cross-field semantic checks
 called out in the protocol.
+
+Model note: the schema dialect probe above used `--model sonnet`.
+Minimal wrapper, schema argument form, schema metadata, and actual
+checkpoint schema probes used the default Claude CLI runtime. The
+transport constraints in the protocol are based on the actual checkpoint
+schema probes; the dialect probe records keyword support only.

@@ -275,6 +275,25 @@ The object below is the checkpoint payload shape inside
 
 ### 7.1.a structured-output transport
 
+Codex wrappers MUST invoke Claude CLI structured output by loading the
+checkpoint schema file as a compact JSON string and passing that JSON
+string as the `--json-schema` argument. The schema file path identifies
+the canonical schema source; it is not a valid `--json-schema` argument
+by itself.
+
+```sh
+schema_json="$(jq -c . "${schema_path}")"
+claude -p --output-format json --json-schema "${schema_json}" ...
+```
+
+Prompt construction is part of the transport contract. Wrappers MUST
+build long worker prompts outside nested shell heredoc command strings;
+do not embed a worker prompt in `zsh -lc '... <<EOF ...'` or an
+equivalent nested quoted heredoc. Use a prompt file or wrapper-native
+argv construction, then pass the prompt body as a single Claude prompt
+argument. If the § 13.1 auth-capable retry is used, retry the same
+`schema_json`, prompt body, command arguments, and identity environment.
+
 Codex wrappers MUST parse stdout as a Claude Code result wrapper. The
 wrapper is valid for checkpoint handling only when all conditions below
 hold:
@@ -297,6 +316,17 @@ The canonical shape source is the checkpoint-specific JSON Schema:
 - `references/schemas/child-checkpoint.plan_intent.schema.json`
 - `references/schemas/child-checkpoint.test_intent.schema.json`
 
+These runtime schema files intentionally omit a top-level `$schema`
+field. Claude CLI structured output accepts schema JSON content with
+`$id`, `title`, `$defs`, and `$ref`, but current structured-output
+transport silently falls back to normal wrapper `result` output when a
+top-level `$schema` field is present. A schema with top-level `$schema`
+MUST NOT be used for `child-checkpoint.v1` transport.
+
+`parent_plan_path` and `child_plan_path` use POSIX absolute path
+constraints (`^/`) for the current macOS/Linux local docs-plan
+workflow.
+
 The schema files enforce required fields, object/array shape, closed
 enums, closed objects, basic path/string constraints, nullable fields,
 and checkpoint-specific ledger row fields. The schema does not prove
@@ -318,6 +348,8 @@ separate handling:
 | failure | retry | result |
 |---|---|---|
 | CLI capability miss (`--json-schema` or `--output-format json` unavailable) | no | stop as runtime prerequisite blocker |
+| schema file missing or cannot be compacted with `jq -c` | no | stop as runtime prerequisite blocker |
+| schema file contains top-level `$schema` | no | stop as runtime prerequisite blocker |
 | auth/session/environment failure covered by § 13.1 | one user-approved auth-capable retry | stop as runtime prerequisite blocker if retry fails |
 | stdout wrapper parse failure | no | stop/escalate without archiving |
 | wrapper `is_error = true` | no | stop/escalate without archiving |
@@ -330,14 +362,15 @@ separate handling:
 normal operation. If such a payload is observed anyway, treat it as a
 transport/protocol violation, not as a worker verdict.
 
-The wrapper MAY preserve failed attempts as local debug artifacts at
-`${current_check_root}/<child>/checkpoints/<checkpoint>.failed-1.txt`
-and
-`${current_check_root}/<child>/checkpoints/<checkpoint>.failed-2.txt`.
-Each debug artifact may include exit code, parsed wrapper JSON or raw
-stdout, stderr trailing lines, and validation failures. These files are
-debug artifacts only, not checkpoint artifacts. Redact auth tokens,
-secrets, and environment dumps if they appear.
+The wrapper MAY preserve the failed attempt as a local debug artifact at
+`${current_check_root}/<child>/checkpoints/<checkpoint>.failed-1.txt`.
+Current structured-output failure handling does not perform same-input
+checkpoint retries, so wrappers produce at most one such failed debug
+artifact for a checkpoint invocation. The debug artifact may include
+exit code, parsed wrapper JSON or raw stdout, stderr trailing lines, and
+validation failures. This file is a debug artifact only, not a
+checkpoint artifact. Redact auth tokens, secrets, and environment dumps
+if they appear.
 
 ### 7.1.d wrapper-side invariants
 
@@ -362,6 +395,15 @@ Wrappers also hard-reject schema-coercion or contradiction signals in
 free-text fields, excluding verbatim quote and evidence fields. The
 hard-reject phrases include `cannot complete as requested`,
 `schema limitation`, `not in the schema`, and `forced by schema`.
+The only quote and evidence fields excluded from this scan are:
+
+- `plan_intent`: `intent_map[].intent_quote`,
+  `intent_map[].child_quote`, and `findings[].evidence[]`
+- `test_intent`: `acceptance_map[].plan_intent_quote`,
+  `acceptance_map[].assertion_quote`, and `findings[].evidence[]`
+
+All `rebuttal_pass` fields and `manual_verification_entries[].procedure`
+/ `manual_verification_entries[].expected` remain scan targets.
 
 `governing_source` enumerates citations from the planning / contract
 domain only: parent §, closure `D-NNN`, tracked root doc, or explicit
@@ -614,6 +656,13 @@ output transport:
 1. `claude --help` lists `--json-schema <schema>`.
 2. `claude --help` lists `--output-format <format>` and `json` is a
    supported output format.
+3. The checkpoint schema file can be loaded and compacted with
+   `jq -c . <schema-path>`.
+4. The checkpoint schema file does not contain a top-level `$schema`
+   field.
+
+Wrappers pass the compact schema JSON string to `--json-schema`; they
+must not pass the schema file path as the option value.
 
 This capability preflight runs before the § 13.1 identity-environment
 handling. If either option is unavailable, the wrapper stops as a

@@ -12,11 +12,13 @@ faithfully translate the child plan's acceptance contract into an
 executable contract. This worker is invoked by the Codex `test-review`
 wrapper as part of the docs-plan v2 cross-review pattern. It produces
 a single `child-checkpoint.v1` payload object; the Codex `test-review`
-harness invokes Claude CLI with structured-output transport
-(`claude -p --output-format json --json-schema
-references/schemas/child-checkpoint.test_intent.schema.json`) and
-archives the payload from the resulting wrapper's `.structured_output`
-field per plan-protocol § 7.1.a.
+harness loads
+`references/schemas/child-checkpoint.test_intent.schema.json` as a
+compact schema JSON string and invokes Claude CLI with
+structured-output transport (`claude -p --output-format json
+--json-schema "${schema_json}"`). The harness archives the payload from
+the resulting wrapper's `.structured_output` field per plan-protocol
+§ 7.1.a.
 
 In docs-plan v2, the approved tests + manual verification entries
 **are** the executable contract for the subsequent `exec-impl` stage.
@@ -145,11 +147,13 @@ worker computes them from the input paths.
    schema-conforming `child-checkpoint.v1` payload object per
    plan-protocol § 7.1 / § 7.3 and the
    `references/schemas/child-checkpoint.test_intent.schema.json` JSON
-   Schema. The worker remains responsible for constructing the
-   envelope object — every required top-level field, every
-   `acceptance_map` row field, and every `manual_verification_entries`
-   element. The Claude CLI structured-output transport serializes this
-   object under the wrapper's top-level `.structured_output` per
+   Schema, which the harness passes to Claude CLI as a schema JSON
+   string, not as a file path. The worker remains responsible for
+   constructing the envelope object — every required top-level field,
+   every `acceptance_map` row field, and every
+   `manual_verification_entries` element. The Claude CLI
+   structured-output transport serializes this object under the
+   wrapper's top-level `.structured_output` per
    plan-protocol § 7.1.a; the worker does not control or wrap stdout
    itself. The harness validates the payload against the
    schema (§ 7.1.b), applies wrapper-side invariants (§ 7.1.d), and

@@ -11,11 +11,12 @@ Verify that a Codex-authored child plan honors the parent plan's
 intent. This worker is invoked by the Codex `draft-review` wrapper as
 part of the docs-plan v2 cross-review pattern. It produces a single
 `child-checkpoint.v1` payload object; the Codex `draft-review` harness
-invokes Claude CLI with structured-output transport
-(`claude -p --output-format json --json-schema
-references/schemas/child-checkpoint.plan_intent.schema.json`) and
-archives the payload from the resulting wrapper's `.structured_output`
-field per plan-protocol § 7.1.a.
+loads `references/schemas/child-checkpoint.plan_intent.schema.json` as
+a compact schema JSON string and invokes Claude CLI with
+structured-output transport (`claude -p --output-format json
+--json-schema "${schema_json}"`). The harness archives the payload from
+the resulting wrapper's `.structured_output` field per plan-protocol
+§ 7.1.a.
 
 It does **not**:
 - write any file
@@ -136,11 +137,12 @@ directly; otherwise the worker computes them from the input paths.
    schema-conforming `child-checkpoint.v1` payload object per
    plan-protocol § 7.1 / § 7.2 and the
    `references/schemas/child-checkpoint.plan_intent.schema.json` JSON
-   Schema. The worker remains responsible for constructing the
-   envelope object — every required top-level field and every
-   `intent_map` row field; `manual_verification_entries` is always
-   `[]` for `plan_intent`. The Claude CLI structured-output transport
-   serializes this object under the wrapper's top-level
+   Schema, which the harness passes to Claude CLI as a schema JSON
+   string, not as a file path. The worker remains responsible for
+   constructing the envelope object — every required top-level field
+   and every `intent_map` row field; `manual_verification_entries` is
+   always `[]` for `plan_intent`. The Claude CLI structured-output
+   transport serializes this object under the wrapper's top-level
    `.structured_output` per plan-protocol § 7.1.a; the worker does not
    control or wrap stdout itself. The harness validates the payload
    against the schema (§ 7.1.b), applies wrapper-side

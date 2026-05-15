@@ -12,6 +12,11 @@ files=(
 
 failed=0
 
+if ! command -v jq >/dev/null 2>&1; then
+  echo "protocol sync mismatch: missing jq"
+  exit 1
+fi
+
 for file in "${files[@]}"; do
   claude_ref="${repo_root}/claude/skills/${file}"
   codex_ref="${repo_root}/codex/skills/${file}"
@@ -35,13 +40,33 @@ for file in "${files[@]}"; do
   fi
 done
 
+schema_files=(
+  "${repo_root}/claude/skills/plan-protocol/references/schemas/child-checkpoint.plan_intent.schema.json"
+  "${repo_root}/claude/skills/plan-protocol/references/schemas/child-checkpoint.test_intent.schema.json"
+  "${repo_root}/codex/skills/plan-protocol/references/schemas/child-checkpoint.plan_intent.schema.json"
+  "${repo_root}/codex/skills/plan-protocol/references/schemas/child-checkpoint.test_intent.schema.json"
+)
+
+for schema_file in "${schema_files[@]}"; do
+  if ! jq empty "${schema_file}" >/dev/null; then
+    echo "schema parse failure: ${schema_file}"
+    failed=1
+    continue
+  fi
+
+  if jq -e 'has("$schema")' "${schema_file}" >/dev/null; then
+    echo "schema metadata regression: ${schema_file}: top-level \$schema"
+    failed=1
+  fi
+done
+
 worker_files=(
   "${repo_root}/claude/skills/draft-intent-worker/SKILL.md"
   "${repo_root}/claude/skills/test-intent-worker/SKILL.md"
 )
 
 for worker_file in "${worker_files[@]}"; do
-  if rg -n \
+  if grep -E -n \
     -e 'Returns a `child-checkpoint' \
     -e 'Print the `child-checkpoint' \
     -e 'Nothing else is printed' \
@@ -66,20 +91,57 @@ wrapper_files=(
 required_wrapper_phrases=(
   ".structured_output"
   "schema-coercion"
+  "schema_json"
+  "prompt file"
+  "nested shell heredoc"
+  "schema path is the source file only"
   "cannot complete as requested"
   "schema limitation"
   "not in the schema"
   "forced by schema"
-  "quote and evidence fields"
+  "quote and evidence field paths"
 )
 
 for wrapper_file in "${wrapper_files[@]}"; do
   for phrase in "${required_wrapper_phrases[@]}"; do
-    if ! rg -q -F "${phrase}" "${wrapper_file}"; then
+    if ! grep -F -q -- "${phrase}" "${wrapper_file}"; then
       echo "wrapper invariant phrase missing: ${wrapper_file}: ${phrase}"
       failed=1
     fi
   done
+done
+
+schema_invocation_files=(
+  "${repo_root}/codex/skills/draft-review/SKILL.md"
+  "${repo_root}/codex/skills/test-review/SKILL.md"
+  "${repo_root}/claude/skills/draft-intent-worker/SKILL.md"
+  "${repo_root}/claude/skills/test-intent-worker/SKILL.md"
+  "${repo_root}/codex/skills/plan-protocol/references/plan-protocol.md"
+  "${repo_root}/claude/skills/plan-protocol/references/plan-protocol.md"
+)
+
+for schema_invocation_file in "${schema_invocation_files[@]}"; do
+  if grep -E -n \
+    -e '--json-schema[[:space:]]+references/schemas/' \
+    -e '--json-schema[[:space:]]+\.\./plan-protocol/references/schemas/' \
+    "${schema_invocation_file}"; then
+    echo "schema path invocation regression: ${schema_invocation_file}"
+    failed=1
+  fi
+done
+
+failed_artifact_files=(
+  "${repo_root}/codex/skills/draft-review/SKILL.md"
+  "${repo_root}/codex/skills/test-review/SKILL.md"
+  "${repo_root}/codex/skills/plan-protocol/references/plan-protocol.md"
+  "${repo_root}/claude/skills/plan-protocol/references/plan-protocol.md"
+)
+
+for failed_artifact_file in "${failed_artifact_files[@]}"; do
+  if grep -F -n -- 'failed-2' "${failed_artifact_file}"; then
+    echo "failed artifact retry regression: ${failed_artifact_file}"
+    failed=1
+  fi
 done
 
 if [[ "${failed}" -ne 0 ]]; then
