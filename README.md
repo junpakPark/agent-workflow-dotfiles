@@ -1,5 +1,7 @@
 # Agent Workflow Dotfiles
 
+한국어: [README.ko.md](README.ko.md)
+
 This repo manages project-neutral agent workflow assets:
 
 - Claude and Codex skills in dotfiles form.
