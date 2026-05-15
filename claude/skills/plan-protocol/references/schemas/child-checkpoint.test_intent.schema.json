@@ -1,0 +1,214 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "child-checkpoint.test_intent.schema.json",
+  "title": "child-checkpoint.v1 test_intent structured_output payload",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "checkpoint",
+    "verdict",
+    "revise_scope",
+    "child_id",
+    "parent_plan_path",
+    "child_plan_path",
+    "reviewed_inputs",
+    "acceptance_map",
+    "manual_verification_entries",
+    "rebuttal_pass",
+    "governing_source",
+    "next_action",
+    "cycle_count",
+    "recheck_loop_signal",
+    "recurrence_cause",
+    "findings"
+  ],
+  "properties": {
+    "schema_version": { "const": "child-checkpoint.v1" },
+    "checkpoint": { "const": "test_intent" },
+    "verdict": {
+      "type": "string",
+      "enum": ["approve", "revise", "decision-needed", "plan-defect"]
+    },
+    "revise_scope": {
+      "oneOf": [
+        { "const": "tests-only" },
+        { "const": "manual-verification-only" },
+        { "type": "null" }
+      ]
+    },
+    "child_id": { "type": "string", "minLength": 1 },
+    "parent_plan_path": { "type": "string", "pattern": "^/" },
+    "child_plan_path": { "type": "string", "pattern": "^/" },
+    "reviewed_inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "git_head",
+        "child_plan_sha256",
+        "test_diff_sha256",
+        "manual_verification_sha256",
+        "reviewed_files"
+      ],
+      "properties": {
+        "git_head": { "type": "string", "minLength": 1 },
+        "child_plan_sha256": { "type": "string", "minLength": 1 },
+        "test_diff_sha256": { "type": "string", "minLength": 1 },
+        "manual_verification_sha256": {
+          "type": ["string", "null"],
+          "minLength": 1
+        },
+        "reviewed_files": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "acceptance_map": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "acceptance_row_id",
+          "plan_intent_quote",
+          "verification_method",
+          "verification_anchor",
+          "assertion_quote",
+          "audit_verdict",
+          "rebuttal_pass",
+          "next_action"
+        ],
+        "properties": {
+          "acceptance_row_id": { "type": "string", "minLength": 1 },
+          "plan_intent_quote": { "type": "string", "minLength": 1 },
+          "verification_method": {
+            "type": "string",
+            "enum": [
+              "unit-test",
+              "integration-test",
+              "manual-verification",
+              "hybrid"
+            ]
+          },
+          "verification_anchor": { "type": "string", "minLength": 1 },
+          "assertion_quote": { "type": "string", "minLength": 1 },
+          "audit_verdict": {
+            "type": "string",
+            "enum": [
+              "match",
+              "mismatch",
+              "inverted",
+              "missing",
+              "out-of-scope",
+              "manual-verification-required"
+            ]
+          },
+          "rebuttal_pass": { "type": "string", "minLength": 1 },
+          "next_action": {
+            "type": "string",
+            "enum": [
+              "keep",
+              "rewrite test (tests-only)",
+              "add manual verification entry",
+              "escalate plan defect",
+              "defer to other child"
+            ]
+          }
+        }
+      }
+    },
+    "manual_verification_entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "acceptance_row_id",
+          "owner",
+          "procedure",
+          "expected",
+          "tooling",
+          "stored_at"
+        ],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "acceptance_row_id": { "type": "string", "minLength": 1 },
+          "owner": {
+            "type": "string",
+            "enum": ["operator", "developer", "qa"]
+          },
+          "procedure": { "type": "string", "minLength": 1 },
+          "expected": { "type": "string", "minLength": 1 },
+          "tooling": { "type": "string", "minLength": 1 },
+          "stored_at": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "rebuttal_pass": { "type": "string", "minLength": 1 },
+    "governing_source": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "next_action": {
+      "type": "string",
+      "enum": [
+        "continue",
+        "revise-child",
+        "revise-tests",
+        "revise-manual",
+        "ask-user",
+        "route-parent-reconcile",
+        "stop"
+      ]
+    },
+    "cycle_count": { "type": "integer", "minimum": 1 },
+    "recheck_loop_signal": {
+      "type": "string",
+      "enum": ["first", "recurrence-2nd"]
+    },
+    "recurrence_cause": {
+      "oneOf": [
+        { "const": "contract" },
+        { "const": "tests-only" },
+        { "const": "manual-only" },
+        { "type": "null" }
+      ]
+    },
+    "findings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/finding" }
+    }
+  },
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "severity",
+        "evidence",
+        "issue",
+        "required_action",
+        "retryable"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^CTI-[0-9]{3}$" },
+        "severity": {
+          "type": "string",
+          "enum": ["blocking", "decision-needed", "non-blocking"]
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "issue": { "type": "string", "minLength": 1 },
+        "required_action": { "type": "string", "minLength": 1 },
+        "retryable": { "type": "boolean" }
+      }
+    }
+  }
+}

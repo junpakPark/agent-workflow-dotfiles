@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "child-checkpoint.plan_intent.schema.json",
+  "title": "child-checkpoint.v1 plan_intent structured_output payload",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "checkpoint",
+    "verdict",
+    "revise_scope",
+    "child_id",
+    "parent_plan_path",
+    "child_plan_path",
+    "reviewed_inputs",
+    "intent_map",
+    "manual_verification_entries",
+    "rebuttal_pass",
+    "governing_source",
+    "next_action",
+    "cycle_count",
+    "recheck_loop_signal",
+    "recurrence_cause",
+    "findings"
+  ],
+  "properties": {
+    "schema_version": { "const": "child-checkpoint.v1" },
+    "checkpoint": { "const": "plan_intent" },
+    "verdict": {
+      "type": "string",
+      "enum": ["approve", "revise", "decision-needed", "plan-defect"]
+    },
+    "revise_scope": {
+      "oneOf": [
+        { "const": "child-plan" },
+        { "type": "null" }
+      ]
+    },
+    "child_id": { "type": "string", "minLength": 1 },
+    "parent_plan_path": { "type": "string", "pattern": "^/" },
+    "child_plan_path": { "type": "string", "pattern": "^/" },
+    "reviewed_inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "git_head",
+        "parent_plan_sha256",
+        "child_plan_sha256",
+        "reviewed_files"
+      ],
+      "properties": {
+        "git_head": { "type": "string", "minLength": 1 },
+        "parent_plan_sha256": { "type": "string", "minLength": 1 },
+        "child_plan_sha256": { "type": "string", "minLength": 1 },
+        "reviewed_files": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "intent_map": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "parent_anchor",
+          "child_anchor",
+          "intent_quote",
+          "child_quote",
+          "audit_verdict",
+          "rebuttal_pass",
+          "next_action"
+        ],
+        "properties": {
+          "parent_anchor": { "type": "string", "minLength": 1 },
+          "child_anchor": { "type": "string", "minLength": 1 },
+          "intent_quote": { "type": "string", "minLength": 1 },
+          "child_quote": { "type": "string", "minLength": 1 },
+          "audit_verdict": {
+            "type": "string",
+            "enum": [
+              "match",
+              "mismatch",
+              "missing",
+              "out-of-scope",
+              "paraphrase-violation"
+            ]
+          },
+          "rebuttal_pass": { "type": "string", "minLength": 1 },
+          "next_action": {
+            "type": "string",
+            "enum": ["keep", "revise-child", "escalate plan defect"]
+          }
+        }
+      }
+    },
+    "manual_verification_entries": {
+      "type": "array",
+      "maxItems": 0
+    },
+    "rebuttal_pass": { "type": "string", "minLength": 1 },
+    "governing_source": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "next_action": {
+      "type": "string",
+      "enum": [
+        "continue",
+        "revise-child",
+        "revise-tests",
+        "revise-manual",
+        "ask-user",
+        "route-parent-reconcile",
+        "stop"
+      ]
+    },
+    "cycle_count": { "type": "integer", "minimum": 1 },
+    "recheck_loop_signal": {
+      "type": "string",
+      "enum": ["first", "recurrence-2nd"]
+    },
+    "recurrence_cause": {
+      "oneOf": [
+        { "const": "contract" },
+        { "const": "tests-only" },
+        { "const": "manual-only" },
+        { "type": "null" }
+      ]
+    },
+    "findings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/finding" }
+    }
+  },
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "severity",
+        "evidence",
+        "issue",
+        "required_action",
+        "retryable"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^CPI-[0-9]{3}$" },
+        "severity": {
+          "type": "string",
+          "enum": ["blocking", "decision-needed", "non-blocking"]
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "issue": { "type": "string", "minLength": 1 },
+        "required_action": { "type": "string", "minLength": 1 },
+        "retryable": { "type": "boolean" }
+      }
+    }
+  }
+}

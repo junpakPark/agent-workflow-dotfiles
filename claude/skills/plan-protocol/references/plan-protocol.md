@@ -227,11 +227,20 @@ first v2 cycle on a pre-existing parent plan that has no board yet.
 ## 7. `child-checkpoint.v1` JSON Envelope
 
 Claude worker output (`draft-intent-worker` and `test-intent-worker`)
-returns this envelope as stdout JSON. Workers must not write files.
-Codex `exec-run` archives the JSON to
+is transported through Claude Code structured output. Workers must not
+write files. Codex wrappers invoke Claude with
+`claude -p --output-format json --json-schema <schema>`, parse stdout
+as a Claude Code result wrapper, validate only the wrapper's
+`.structured_output` object, and archive that object to
 `${current_check_root}/<child>/checkpoints/<checkpoint>.json`.
 
+Wrapper stdout, wrapper `result`, stderr, debug logs, and failed
+transport bodies are not checkpoint artifacts.
+
 ### 7.1 Common envelope
+
+The object below is the checkpoint payload shape inside
+`.structured_output`, not the whole Claude CLI stdout wrapper.
 
 ```json
 {
@@ -263,6 +272,96 @@ Codex `exec-run` archives the JSON to
   ]
 }
 ```
+
+### 7.1.a structured-output transport
+
+Codex wrappers MUST parse stdout as a Claude Code result wrapper. The
+wrapper is valid for checkpoint handling only when all conditions below
+hold:
+
+- stdout parses as JSON object
+- wrapper `is_error` is `false`
+- wrapper `terminal_reason` is `"completed"`
+- wrapper `.structured_output` exists and is an object
+
+Only `.structured_output` is validated as `child-checkpoint.v1` and
+only `.structured_output` may be archived as `plan_intent.json` or
+`test_intent.json`. A wrapper MUST NOT normalize wrapper `result`,
+stderr, debug text, Markdown fences, or any other body into a
+checkpoint artifact.
+
+### 7.1.b checkpoint schema validity
+
+The canonical shape source is the checkpoint-specific JSON Schema:
+
+- `references/schemas/child-checkpoint.plan_intent.schema.json`
+- `references/schemas/child-checkpoint.test_intent.schema.json`
+
+The schema files enforce required fields, object/array shape, closed
+enums, closed objects, basic path/string constraints, nullable fields,
+and checkpoint-specific ledger row fields. The schema does not prove
+semantic correctness. Workers remain responsible for row coverage,
+quote fidelity, governing-source discipline, rebuttal consistency, and
+recurrence judgment. Wrappers remain responsible for invocation
+invariants and cross-field checks in this protocol.
+
+The wrapper chooses the schema from the checkpoint being invoked and
+MUST reject `.structured_output` if it does not validate against that
+schema. Schema-invalid payloads are not checkpoint artifacts and MUST
+NOT be archived.
+
+### 7.1.c failure handling
+
+Runtime prerequisite failures and structured-output failures have
+separate handling:
+
+| failure | retry | result |
+|---|---|---|
+| CLI capability miss (`--json-schema` or `--output-format json` unavailable) | no | stop as runtime prerequisite blocker |
+| auth/session/environment failure covered by § 13.1 | one user-approved auth-capable retry | stop as runtime prerequisite blocker if retry fails |
+| stdout wrapper parse failure | no | stop/escalate without archiving |
+| wrapper `is_error = true` | no | stop/escalate without archiving |
+| wrapper `terminal_reason != "completed"` | no | stop/escalate without archiving |
+| missing or non-object `.structured_output` | no | stop/escalate without archiving |
+| schema-invalid `.structured_output` | no | stop/escalate without archiving |
+| wrapper-side invariant violation | no | stop/escalate without archiving |
+
+`--json-schema` should prevent schema-invalid `.structured_output` in
+normal operation. If such a payload is observed anyway, treat it as a
+transport/protocol violation, not as a worker verdict.
+
+The wrapper MAY preserve failed attempts as local debug artifacts at
+`${current_check_root}/<child>/checkpoints/<checkpoint>.failed-1.txt`
+and
+`${current_check_root}/<child>/checkpoints/<checkpoint>.failed-2.txt`.
+Each debug artifact may include exit code, parsed wrapper JSON or raw
+stdout, stderr trailing lines, and validation failures. These files are
+debug artifacts only, not checkpoint artifacts. Redact auth tokens,
+secrets, and environment dumps if they appear.
+
+### 7.1.d wrapper-side invariants
+
+Wrappers MUST validate these after schema validation:
+
+- invocation identity fields match the requested checkpoint, child id,
+  parent path, child path, file hashes, and `cycle_count`
+- `recheck_loop_signal = "first"` implies `recurrence_cause = null`
+- `recheck_loop_signal = "recurrence-2nd"` implies
+  `recurrence_cause != null`
+- `plan_intent` with `recheck_loop_signal = "recurrence-2nd"` uses
+  `recurrence_cause = "contract"` only
+- `plan_intent` with `verdict = revise` uses
+  `revise_scope = "child-plan"` only
+- `test_intent` with `verdict = revise` uses
+  `revise_scope = "tests-only"` or `"manual-verification-only"` only
+- `plan_intent` `governing_source` MUST NOT cite child sources
+- `governing_source` MUST NOT cite `code-quality-worker principle`
+- § 7.4 verdict / `next_action` / `revise_scope` matrix is satisfied
+
+Wrappers also hard-reject schema-coercion or contradiction signals in
+free-text fields, excluding verbatim quote and evidence fields. The
+hard-reject phrases include `cannot complete as requested`,
+`schema limitation`, `not in the schema`, and `forced by schema`.
 
 `governing_source` enumerates citations from the planning / contract
 domain only: parent §, closure `D-NNN`, tracked root doc, or explicit
@@ -326,12 +425,18 @@ See § 8.
 
 ### 7.4 Verdict semantics
 
-| verdict | meaning | follow-up |
-|---|---|---|
-| `approve` | all ledger rows pass; child proceeds | Codex `exec-run` appends the corresponding child-transition entry |
-| `revise` | ledger rows need rework within the current scope | Codex re-invokes the same stage; bounded by `recheck_loop_signal` |
-| `decision-needed` | the finding requires a user decision or policy lock | Codex stops; routes to Claude `plan-reconcile` for user-question artifact |
-| `plan-defect` | the child plan itself is wrong; cannot be fixed by tests-only or impl-only rewrite | Codex stops; routes to Claude `plan-reconcile`; `child_<id>_plan_revision_required` follows |
+| verdict | required top-level fields | meaning | follow-up |
+|---|---|---|---|
+| `approve` | `next_action = continue`; `revise_scope = null`; no blocking or decision-needed findings | all ledger rows pass; child proceeds | Codex `exec-run` appends the corresponding child-transition entry |
+| `revise` (`plan_intent`) | `next_action = revise-child`; `revise_scope = child-plan` | child plan needs rework within current child scope | Codex re-invokes the same stage; bounded by `recheck_loop_signal` |
+| `revise` (`test_intent`, tests) | `next_action = revise-tests`; `revise_scope = tests-only` | tests need rework without child contract change | Codex re-invokes `exec-tests`; bounded by `recheck_loop_signal` |
+| `revise` (`test_intent`, manual) | `next_action = revise-manual`; `revise_scope = manual-verification-only` | manual verification needs rework without child contract change | Codex re-invokes `exec-tests` for manual verification; bounded by `recheck_loop_signal` |
+| `decision-needed` | `next_action = ask-user` or `route-parent-reconcile`; `revise_scope = null` | the finding requires a user decision or policy lock | Codex stops; routes to Claude `plan-reconcile` for user-question artifact |
+| `plan-defect` | `next_action = route-parent-reconcile` or `stop`; `revise_scope = null` | the child plan itself is wrong; cannot be fixed by tests-only or impl-only rewrite | Codex stops; routes to Claude `plan-reconcile`; `child_<id>_plan_revision_required` follows |
+
+Any verdict / `next_action` / `revise_scope` combination outside this
+matrix is a wrapper-side invariant violation and MUST NOT be archived
+as a checkpoint.
 
 ---
 
@@ -499,6 +604,22 @@ missing (for example, account/keychain lookup cannot resolve the user),
 the wrapper must report a runtime environment blocker. It must not
 convert that failure into a `draft-intent-worker` or `test-intent-worker`
 checkpoint verdict.
+
+### 13.2 Claude CLI Capability Preflight
+
+Before invoking a Claude worker for `child-checkpoint.v1`, Codex
+wrappers must confirm that the installed Claude CLI supports structured
+output transport:
+
+1. `claude --help` lists `--json-schema <schema>`.
+2. `claude --help` lists `--output-format <format>` and `json` is a
+   supported output format.
+
+This capability preflight runs before the § 13.1 identity-environment
+handling. If either option is unavailable, the wrapper stops as a
+runtime prerequisite blocker. It must not retry the same worker, must
+not fall back to bare stdout, and must not create a checkpoint
+artifact.
 
 ---
 
