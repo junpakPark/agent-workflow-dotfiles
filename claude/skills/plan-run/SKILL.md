@@ -7,10 +7,16 @@ description: Planning-stage router for docs-plan v2. Reads the parent plan's `##
 
 ## Purpose
 
-Pick exactly one planning-stage action for a docs-plan v2 family.
-Stops at confirmation gates rather than trying to finish the whole
-planning lifecycle in one pass. Hands off to Codex `exec-run` after
-`policy-locked`.
+Run planning-stage actions for a docs-plan v2 family in sequence
+within a single turn. After each worker completes, re-read `## Status`
+and route again. Stop only at one of three exit conditions:
+
+- immediately after `/plan-intake` (cross-turn user confirm required)
+- `decision-blocked` (user decision required)
+- `policy-locked` (hand off to Codex `exec-run`)
+
+`draft → review → reconcile` chain automatically because no user
+decision is involved between them.
 
 In docs-plan v2 the lifecycle is split across three routers:
 - `plan-run` — planning (Claude). This skill.
@@ -74,19 +80,37 @@ Plan review and reconcile cycles iterate: a new `/plan-review`
 artifact lands → `/plan-reconcile` triages → if material change
 occurred, `/plan-reconcile` triggers a re-review per protocol § 10
 material-change rules. `plan-run` reads the latest state and routes
-accordingly each turn.
+accordingly each iteration.
+
+### Auto-chain Loop
+
+After a worker completes, re-read `## Status` and `## Closure map`,
+then apply the routing table again. Continue iterating within the
+same turn until the routing decision is a stop or hand-off. Emit a
+one-line progress note in chat after each worker invocation so the
+user can follow the chain (e.g. `plan-draft complete → routing to
+plan-review`).
+
+`parent_review_converged` is the convergence breaker for the
+review/reconcile cycle: reconcile appends it once unresolved blocking
+contradictions reach zero, the next iteration routes back to
+reconcile, and reconcile then appends `policy-locked` for the
+hand-off. No router-level iteration cap is needed — convergence is
+guaranteed by plan-protocol § 4.1 and the finding-recurrence key in
+§ 8.
 
 ## Stop Gates
 
-- After `/plan-intake`, stop. The user must explicitly confirm intake
-  in a separate turn before `/plan-draft`.
-- After `/plan-draft`, stop. The next stage is `/plan-review`.
-- After `/plan-review`, stop. The next stage is `/plan-reconcile`.
-- After `/plan-reconcile` writes `policy-locked`, hand off to Codex
-  `exec-run`. `plan-run` does not invoke `exec-run` directly — that is
-  a Codex command surface. Report the hand-off to the user.
-- After `decision-blocked` is raised, wait. Do not attempt to bypass
-  by re-running review or rewriting plan body.
+- After `/plan-intake`, stop and yield the turn. Do not invoke
+  `/plan-draft` until the user explicitly confirms intake in a new
+  turn. This is the only cross-turn gate in the chain.
+- When `## Status` reaches `decision-blocked`, stop and yield the
+  turn. Do not bypass by re-running review or rewriting plan body —
+  only the user's response (consumed by `/plan-reconcile` as
+  `decision-resolved`) can release this.
+- When `## Status` reaches `policy-locked`, stop and report the
+  hand-off to Codex `exec-run`. `plan-run` does not invoke `exec-run`
+  directly — that is a Codex command surface.
 - Never write to `## Status` or `## Child Handoff Board`.
 - Never invoke `exec-*` or `finalize-*` skills from this router.
 
@@ -95,7 +119,9 @@ accordingly each turn.
 When invoking a worker skill (`plan-intake`, `plan-draft`,
 `plan-review`, `plan-reconcile`), this router cites the active
 branching line as **file path + line number + verbatim one-liner**
-in chat before the invocation, per plan-protocol § 13.
+in chat before the invocation, per plan-protocol § 13. In an
+auto-chain pass this citation is repeated before every worker call —
+once per invocation, not once per turn.
 
 If a worker skill's contract conflicts with the protocol body (e.g.,
 the worker emits a closed-set marker not in protocol § 2), stop and
