@@ -61,6 +61,32 @@ Stop after the summary is in chat. The user must confirm explicitly
 before the assistant proceeds to `/plan-draft`. Sourcing complexity or
 trivial scope does not waive the confirmation.
 
+## Success Criteria — Cross-Tool Consistency Mandate
+
+When the family changes any public tool's signature, response shape,
+or behavior contract, the Success criteria section MUST additionally
+include an automated cross-tool consistency check, declared at intake
+so the parent plan inherits it:
+
+- **Caller enumeration.** List every internal caller of the changed
+  tool via code search (for example,
+  `rg -n "<tool_name>\(" src tests`).
+- **Automated equivalence test.** For each enumerated caller, an
+  automated test verifies that — for the same identifier inputs — the
+  caller produces the same end-user observable result as a direct
+  invocation of the changed tool under the new contract.
+- **Explicit isolation of non-adopters.** Any caller that intentionally
+  does not absorb the new contract (deprecated path, frozen legacy
+  surface, etc.) MUST be named in `Scope` or `Non-goals` rather than
+  left implicit; otherwise the consistency test must cover it.
+
+Synchronizing case: `get_law_text` gained an `article_number`
+parameter, but the citation-verification caller was not updated, so
+direct tool invocation and the verification tool returned different
+results for the same identifier — an implementation gap a cross-tool
+consistency check in success criteria would have caught at the
+parent-plan acceptance level.
+
 ## Stop Gate
 
 - Intake never writes a plan file.
