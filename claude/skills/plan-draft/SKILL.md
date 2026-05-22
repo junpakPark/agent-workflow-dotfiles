@@ -71,6 +71,27 @@ approval.
 4. Bidirectionally link the parent with any pre-existing root docs it
    references.
 
+## Evidence-Locked Facts (Save Block)
+
+The save is **blocked** if the draft locks a concrete repo / archive /
+code-derived fact as source-of-truth, acceptance, or closure-candidate
+wording without a directly read evidence anchor. This includes caller
+lists, tool invocation relationships, response-shape invariants,
+archive-derived tables, and current code behavior.
+
+For every such fact, the draft must cite the direct evidence that was
+read in this run (for example, file path + line range / section name, or
+the exact code-search command and matched path). If the evidence was not
+directly read, either:
+- stop and collect the evidence before writing the fact as locking text,
+  or
+- mark the statement as an unverified, non-locking note that is not used
+  in `## Source of truth`, `## Success criteria`, acceptance language,
+  child responsibility boundaries, or closure-candidate wording.
+
+Do not generalize from remembered family patterns, archived summaries,
+or observed convention when the draft text will lock a concrete fact.
+
 ## Draft Depth Control (Save Block)
 
 The save is **blocked** if the draft output contains any of:

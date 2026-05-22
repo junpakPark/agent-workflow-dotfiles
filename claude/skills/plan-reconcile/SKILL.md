@@ -61,7 +61,13 @@ explicit user approval.
 3. **Merge duplicates.** Collapse entries sharing an evidence anchor.
 4. **Validate evidence.** Read each entry's cited evidence directly.
    Drop entries whose evidence fails as `reject` with the validation
-   result attached.
+   result attached. When the fix concerns a wrong concrete fact inside
+   a table, list, grouped bullets, or other evidence cluster, also
+   inspect the neighboring entries in that same source surface before
+   applying the fix. For caller lists, tool invocation relationships,
+   response-shape invariants, archive-derived tables, or current code
+   behavior, validate both the cited archive/source table and the
+   current code path when available before locking new wording.
 5. **Triage (4-classification, P2-D-20 lock).** See
    [references/plan-review-closure.md § Triage Classifications](references/plan-review-closure.md).
    Default stance: acknowledge what is valid, push back actively when
