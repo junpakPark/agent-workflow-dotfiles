@@ -294,6 +294,24 @@ argv construction, then pass the prompt body as a single Claude prompt
 argument. If the § 13.1 auth-capable retry is used, retry the same
 `schema_json`, prompt body, command arguments, and identity environment.
 
+Long-running checkpoint polling is part of the transport contract.
+Claude `--output-format json` may produce no stdout until the process
+exits; silence is expected and MUST NOT be treated as a stall signal.
+After spawning Claude, wrappers poll process liveness every 30 seconds.
+Before 10 minutes elapsed, wrappers wait without user-facing progress
+reports unless the process exits. At 10 minutes elapsed and every 1
+minute after that, wrappers report that the checkpoint is still running
+with child id, checkpoint name, PID when available, and elapsed time. At
+15 minutes elapsed, wrappers ask the user whether to terminate; if the
+user does not explicitly request termination, wrappers continue waiting
+by default. Wrappers MUST NOT kill a live Claude checkpoint process for
+inactivity and MUST NOT launch a duplicate Claude review while a
+matching child/checkpoint process is still live. If a user-directed
+termination, host interruption, or wrapper crash happens before a
+Claude result wrapper is emitted, the attempt is a runtime interruption,
+not a worker verdict; any same-input retry requires explicit user
+approval because the prior call may already have consumed tokens.
+
 Codex wrappers MUST parse stdout as a Claude Code result wrapper. The
 wrapper is valid for checkpoint handling only when all conditions below
 hold:
@@ -351,6 +369,8 @@ separate handling:
 | schema file missing or cannot be compacted with `jq -c` | no | stop as runtime prerequisite blocker |
 | schema file contains top-level `$schema` | no | stop as runtime prerequisite blocker |
 | auth/session/environment failure covered by § 13.1 | one user-approved auth-capable retry | stop as runtime prerequisite blocker if retry fails |
+| live Claude checkpoint silence before user-requested termination | no | keep waiting; silence is expected |
+| user-directed termination, host interruption, or wrapper crash before stdout wrapper | only with explicit user approval | stop/escalate without archiving |
 | stdout wrapper parse failure | no | stop/escalate without archiving |
 | wrapper `is_error = true` | no | stop/escalate without archiving |
 | wrapper `terminal_reason != "completed"` | no | stop/escalate without archiving |
@@ -367,10 +387,12 @@ The wrapper MAY preserve the failed attempt as a local debug artifact at
 Current structured-output failure handling does not perform same-input
 checkpoint retries, so wrappers produce at most one such failed debug
 artifact for a checkpoint invocation. The debug artifact may include
-exit code, parsed wrapper JSON or raw stdout, stderr trailing lines, and
-validation failures. This file is a debug artifact only, not a
-checkpoint artifact. Redact auth tokens, secrets, and environment dumps
-if they appear.
+PID, start timestamp, elapsed time, polling interval, first user prompt
+timestamp when applicable, termination source, exit code, parsed wrapper
+JSON or raw stdout, stderr trailing lines, and validation failures. Use
+actual elapsed durations rather than vague terms such as "extended
+wait." This file is a debug artifact only, not a checkpoint artifact.
+Redact auth tokens, secrets, and environment dumps if they appear.
 
 ### 7.1.d wrapper-side invariants
 

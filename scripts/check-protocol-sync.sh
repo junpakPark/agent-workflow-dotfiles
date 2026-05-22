@@ -159,12 +159,42 @@ required_wrapper_phrases=(
   "not in the schema"
   "forced by schema"
   "quote and evidence field paths"
+  "silence is expected"
+  "30 seconds"
+  "10 minutes"
+  "15 minutes"
+  "continue waiting by default"
+  "Do not launch a duplicate"
 )
 
 for wrapper_file in "${wrapper_files[@]}"; do
   for phrase in "${required_wrapper_phrases[@]}"; do
     if ! grep -F -q -- "${phrase}" "${wrapper_file}"; then
       echo "wrapper invariant phrase missing: ${wrapper_file}: ${phrase}"
+      failed=1
+    fi
+  done
+done
+
+protocol_files=(
+  "${repo_root}/codex/skills/plan-protocol/references/plan-protocol.md"
+  "${repo_root}/claude/skills/plan-protocol/references/plan-protocol.md"
+)
+
+required_protocol_phrases=(
+  "silence is expected"
+  "30 seconds"
+  "10 minutes"
+  "15 minutes"
+  "wrappers continue waiting"
+  "MUST NOT launch a duplicate Claude review"
+  "only with explicit user approval"
+)
+
+for protocol_file in "${protocol_files[@]}"; do
+  for phrase in "${required_protocol_phrases[@]}"; do
+    if ! grep -F -q -- "${phrase}" "${protocol_file}"; then
+      echo "protocol long-running checkpoint phrase missing: ${protocol_file}: ${phrase}"
       failed=1
     fi
   done
