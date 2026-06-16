@@ -38,6 +38,8 @@ It **does**:
 - build an `acceptance_map` ledger row for every acceptance row in
   the child plan (or every success criterion when no acceptance rows
   exist)
+- apply the named production primitive witness rule from
+  plan-protocol § 10a
 - detect `inverted` assertions, `missing` coverage, and
   `manual-verification-required` cases
 - assign a verdict per the protocol envelope rules
@@ -55,6 +57,7 @@ This worker consumes:
 - the recurrence routing rules from § 8 (the worker sets
   `recurrence_cause` to `tests-only`, `manual-only`, or `contract`
   depending on which surface drives the recurrence)
+- the named production primitive witness rule from § 10a
 - the verdict semantics from § 7.4
 
 Do not redefine any rule that lives in the protocol reference. Cite
@@ -85,10 +88,24 @@ worker computes them from the input paths.
    - acceptance rows in §3 (each with an id like `R1`, `R12`, etc.) and
      their `plan_intent_quote`
    - if no explicit acceptance rows, use the success criteria as rows
+   - mark rows that name a production primitive such as an SDK, MCP
+     client, model/tool-call loop runtime, adapter, production builder
+     or service composition path, runtime mode, migration, queue
+     gateway, or external client boundary
 3. **Identify verification anchors.** For each test in the diff, locate
    the assertion line and the test function name. For each manual
    verification entry, locate the procedure step and the expected
    outcome.
+   For every row marked as naming a production primitive, identify the
+   production witness: the assertion or manual procedure that verifies
+   production import/use, construction, wiring, configuration routing,
+   migration presence, or a static guard over the real production path.
+   Fake/local test doubles may simulate external responses, network,
+   model output, provider failure, clock, storage, or operator input,
+   but they must not replace the named production primitive itself.
+   Dependency-string checks count only for dependency-declaration rows;
+   constructor-slot checks do not count when the row requires production
+   construction or injection.
 4. **Build `acceptance_map` rows.** For every acceptance row, produce:
    - `acceptance_row_id`
    - `plan_intent_quote` (verbatim child plan text)
@@ -128,7 +145,8 @@ worker computes them from the input paths.
    - set `recheck_loop_signal = "recurrence-2nd"`
 7. **Assign verdict.** Per plan-protocol § 7.4:
    - `approve` — every row's `audit_verdict` is `match` (manual rows
-     with complete `manual_verification_entries` count as `match`)
+     with complete `manual_verification_entries` count as `match`), and
+     every named production primitive row has a production witness
    - `revise` — at least one row is non-`match`, no `decision-needed`
      finding, no `plan-defect`; set `revise_scope` per the dominant
      non-match cause:
@@ -143,6 +161,10 @@ worker computes them from the input paths.
    - `plan-defect` — the child plan acceptance is internally
      inconsistent or unachievable, or `recurrence-2nd` was reached
      with `recurrence_cause = "contract"`
+   Missing production witness coverage is under-coverage. Treat it as a
+   tests-only or manual-verification-only revision when the child
+   contract is sound. Use `plan-defect` only when the child contract
+   itself dilutes, contradicts, or omits the required primitive.
 8. **Produce structured-output payload.** Construct a single
    schema-conforming `child-checkpoint.v1` payload object per
    plan-protocol § 7.1 / § 7.3 and the
@@ -232,8 +254,16 @@ If a non-`match` row has no governing source, the row is `ungrounded`
   within tests-only or manual-only scope.
 - **Test-as-contract responsibility.** Because `exec-impl` will trust
   the approved tests/manual entries verbatim, an `approve` verdict
-  must be cautious: under-coverage is a plan-defect, not a
-  silently-passing approval.
+  must be cautious: under-coverage is never a silently-passing
+  approval. Route it to `revise` when tests/manual entries can repair a
+  sound child contract, or to `plan-defect` when the child contract
+  itself must change.
+- **Production witness responsibility.** A row requiring a named
+  production primitive cannot be approved by tests that only assert a
+  dependency string, generic callback, fake runner, fake model runner,
+  constructor slot, or local-only shell. The approval must identify a
+  witness over the real production import/use, construction, wiring, or
+  configuration route.
 
 ## `.structured_output` Payload Example
 

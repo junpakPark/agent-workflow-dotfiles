@@ -189,6 +189,10 @@ required_protocol_phrases=(
   "wrappers continue waiting"
   "MUST NOT launch a duplicate Claude review"
   "only with explicit user approval"
+  "Named Production Primitive Witness Rule"
+  "production witness"
+  "They may not replace the named production primitive itself"
+  "generic callback, fake runner"
 )
 
 for protocol_file in "${protocol_files[@]}"; do
@@ -198,6 +202,25 @@ for protocol_file in "${protocol_files[@]}"; do
       failed=1
     fi
   done
+done
+
+production_witness_files=(
+  "${repo_root}/claude/skills/draft-intent-worker/SKILL.md"
+  "${repo_root}/claude/skills/test-intent-worker/SKILL.md"
+  "${repo_root}/codex/skills/exec-draft/SKILL.md"
+  "${repo_root}/codex/skills/exec-tests/SKILL.md"
+  "${repo_root}/codex/skills/exec-impl/SKILL.md"
+)
+
+for production_witness_file in "${production_witness_files[@]}"; do
+  if ! grep -F -q -- "production primitive" "${production_witness_file}"; then
+    echo "production witness guard phrase missing: ${production_witness_file}: production primitive"
+    failed=1
+  fi
+  if ! grep -F -q -- "fake runner" "${production_witness_file}"; then
+    echo "production witness guard phrase missing: ${production_witness_file}: fake runner"
+    failed=1
+  fi
 done
 
 schema_invocation_files=(

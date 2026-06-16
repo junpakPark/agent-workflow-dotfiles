@@ -27,11 +27,13 @@ move artifacts without explicit user approval.
 1. Confirm Q1 (`child_<id>_plan_locked` after latest draft/revision) and Q2 pass.
 2. Append `family_status: child_<id>_tests_started` when entering through `exec-run`.
 3. Read every child acceptance row and map each row to at least one verification anchor: unit test, integration test, manual verification, manual scenario, or hybrid.
-4. Modify only test/verification artifacts. Do not implement production behavior in this stage.
-5. Keep test names feature-centric; do not put internal docs-plan IDs on collaborator-facing surfaces.
-6. For manual-only verification, write a concrete owner/procedure/expected/tooling entry that `test-review` can evaluate.
-7. Run the relevant tests when safe and not expensive. Do not run expensive project-specific runtime commands unless the user explicitly requested it.
-8. Hand off to `test-review`. `child_<id>_tests_written` is appended only after `test-review` returns `approve`.
+4. For each acceptance row that names a production primitive, add at least one production witness per plan-protocol § 10a. The anchor must verify production import/use, construction, wiring, configuration routing, migration presence, or a static guard over the real production path.
+5. Keep fake/local doubles outside the primitive boundary. They may simulate external responses, network, model output, provider failure, clock, storage, or operator input, but the test must fail if the production primitive is replaced by only a fake runner, generic callback, dependency string, constructor slot, or local-only shell.
+6. Modify only test/verification artifacts. Do not implement production behavior in this stage.
+7. Keep test names feature-centric; do not put internal docs-plan IDs on collaborator-facing surfaces.
+8. For manual-only verification, write a concrete owner/procedure/expected/tooling entry that `test-review` can evaluate.
+9. Run the relevant tests when safe and not expensive. Do not run expensive project-specific runtime commands unless the user explicitly requested it.
+10. Hand off to `test-review`. `child_<id>_tests_written` is appended only after `test-review` returns `approve`.
 
 ## Stop Conditions
 

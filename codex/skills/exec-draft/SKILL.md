@@ -28,9 +28,11 @@ explicit user approval.
 2. Read the parent plan's source-of-truth, non-goals, child responsibility boundaries, closure map, and Child Handoff Board row.
 3. Create or revise only the target child plan. Place it under `plan/families/`.
 4. Include enough for executable work: responsibility, dependencies, acceptance rows, allowed/forbidden write set, validation expectations, manual verification entries if needed, and non-goals.
-5. Do not lock implementation details such as exact helper function names, fixture bodies, patch order, or internal refactor sequence unless the parent explicitly requires them.
-6. Do not add or alter parent decisions. If child acceptance/scope/source-of-truth must change, stop and route to Claude `plan-reconcile`.
-7. Update the Child Handoff Board runtime columns if operating under `exec-run`.
+5. Preserve every parent-named production primitive as load-bearing per plan-protocol § 10a. If the parent names an SDK, MCP client, model/tool-call loop runtime, adapter, production builder or service composition path, runtime mode, migration, queue gateway, or external client boundary, the child must name the same primitive in its responsibility and acceptance/validation contract unless the parent explicitly allowed a substitute.
+6. Limit fake/local test-double wording. It may cover external responses, network, model output, provider failure, clock, storage, or operator input, but it must not replace the named production primitive with a generic callback, fake runner, dependency string, constructor slot, or local-only adapter.
+7. Do not lock implementation details such as exact helper function names, fixture bodies, patch order, or internal refactor sequence unless the parent explicitly requires them.
+8. Do not add or alter parent decisions. If child acceptance/scope/source-of-truth must change, stop and route to Claude `plan-reconcile`.
+9. Update the Child Handoff Board runtime columns if operating under `exec-run`.
 
 ## Status
 

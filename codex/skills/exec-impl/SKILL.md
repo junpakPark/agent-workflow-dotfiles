@@ -29,11 +29,12 @@ explicit user approval.
 3. Implement only what is needed to satisfy approved tests/manual verification and the child allowed write set.
 4. Do not add, remove, or rewrite approved tests/manual verification during implementation. If they are wrong, stop and route back through `test-review`.
 5. Run the relevant tests/checks. Do not run expensive project-specific runtime commands unless explicitly requested by the user.
-6. Perform the `over-satisfies` self-check: compare changed files and behavior against the child implementation contract and allowed/forbidden write set.
-7. If unrelated/scope-widening changes are safe to narrow back, remove them and continue without a marker. If narrow-back is unsafe because of user-owned dirty diff, regression risk, or needed approval, stop and append `child_<id>_blocked`.
-8. If the scope itself is wrong or a new acceptance/source-of-truth decision is needed, stop and route to Claude `plan-reconcile`; do not write `_plan_revision_required` yourself.
-9. On success, append `family_status: child_<id>_implement_completed`, update board, report changed files, validation, and stop.
+6. Apply the named production primitive witness rule from plan-protocol § 10a. For every acceptance row that names a production primitive, identify the changed production code path that satisfies it. If the approved tests/manual verification would pass while replacing the primitive with a fake runner, generic callback, dependency string, constructor slot, or local-only shell, stop and route back through `test-review`; do not append `child_<id>_implement_completed`.
+7. Perform the `over-satisfies` self-check: compare changed files and behavior against the child implementation contract and allowed/forbidden write set.
+8. If unrelated/scope-widening changes are safe to narrow back, remove them and continue without a marker. If narrow-back is unsafe because of user-owned dirty diff, regression risk, or needed approval, stop and append `child_<id>_blocked`.
+9. If the scope itself is wrong or a new acceptance/source-of-truth decision is needed, stop and route to Claude `plan-reconcile`; do not write `_plan_revision_required` yourself.
+10. On success, append `family_status: child_<id>_implement_completed`, update board, report changed files, validation, and stop.
 
 ## Hard Stops
 
-Stop for parent intent/policy/source-of-truth conflict, scope expansion, manual/external gate, destructive cleanup, runtime prerequisite gap, unexpected user-owned dirty diff, or any expensive operator command requirement.
+Stop for parent intent/policy/source-of-truth conflict, scope expansion, missing production witness for a named production primitive, manual/external gate, destructive cleanup, runtime prerequisite gap, unexpected user-owned dirty diff, or any expensive operator command requirement.

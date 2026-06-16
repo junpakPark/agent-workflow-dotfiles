@@ -594,6 +594,49 @@ these are Codex domain (`exec-run` or `exec-code-quality`).
 
 ---
 
+## 10a. Named Production Primitive Witness Rule
+
+A named production primitive is any parent decision, closure, child
+acceptance row, or source-of-truth assignment that names a concrete
+runtime or integration substrate required in the production code path.
+Examples include an SDK, MCP client, model/tool-call loop runtime,
+adapter, production builder or service composition path, runtime mode,
+migration, queue gateway, or external client boundary.
+
+When a named production primitive appears, child drafting, test review,
+and implementation self-check treat it as load-bearing:
+
+- Child plans must preserve the named primitive. They must not dilute it
+  into a generic callback, fake runner, dependency string, constructor
+  slot, or local-only adapter unless the parent explicitly allows that
+  substitute.
+- Fake/local test doubles may simulate external responses, network,
+  model output, provider failure, clock, storage, or operator input.
+  They may not replace the named production primitive itself.
+- The test/manual contract needs a production witness for each covered
+  row that names a production primitive. A production witness can be an
+  assertion or manual procedure that verifies production import/use,
+  construction, wiring, configuration routing, migration presence, or a
+  static guard over the real production path.
+- A dependency declaration alone is a production witness only for a row
+  whose whole contract is dependency declaration. A constructor slot
+  alone is not a production witness for a row that requires the
+  production builder to construct or inject the primitive.
+- If `test_intent` sees a named production primitive without a
+  production witness, that is under-coverage. Use `revise` with
+  `revise_scope = tests-only | manual-verification-only` when the child
+  contract is sound; use `plan-defect` or `decision-needed` only when
+  the child contract itself is contradictory, unachievable, or
+  ambiguous.
+- Before `child_<id>_implement_completed`, `exec-impl` must identify how
+  changed production code satisfies each named production primitive. If
+  the approved test/manual contract would pass while replacing the
+  primitive with a fake runner, generic callback, or local-only shell,
+  stop and route back through `test-review`; do not mark implementation
+  complete.
+
+---
+
 ## 11. `exec-impl` Self-check Invariants
 
 Codex `exec-impl` enforces these without re-asking Claude:
@@ -610,6 +653,8 @@ Codex `exec-impl` enforces these without re-asking Claude:
   - safe → narrow back silently and continue (no marker)
   - unsafe → append `child_<id>_blocked`
   - scope itself wrong → escalate to Claude `plan-reconcile`
+- Apply the named production primitive witness rule in § 10a before
+  appending `child_<id>_implement_completed`.
 
 ---
 

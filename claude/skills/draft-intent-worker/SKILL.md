@@ -45,6 +45,7 @@ This worker consumes:
   `intent_map` ledger and the `audit_verdict` enum)
 - the recurrence routing rules from § 8 (the worker sets
   `recurrence_cause` when `recheck_loop_signal = recurrence-2nd`)
+- the named production primitive witness rule from § 10a
 - the verdict semantics from § 7.4
 
 Do not redefine any rule that lives in the protocol reference. Cite
@@ -75,6 +76,10 @@ directly; otherwise the worker computes them from the input paths.
      truth` assignments)
    - parent § responsibility framing for the target child
    - parent non-goals and scope boundaries
+   - parent-named production primitives such as SDKs, MCP clients,
+     model/tool-call loop runtimes, adapters, production builders or
+     service composition paths, runtime modes, migrations, queue
+     gateways, and external client boundaries
    - parent `## Status` family-level state (read-only; used to verify
      `policy-locked` is present per plan-protocol § 4.1)
 3. **Identify child intent claims.** From the child plan:
@@ -114,6 +119,18 @@ directly; otherwise the worker computes them from the input paths.
    Reasoning: parent decisions are policy locks. If the child writer
    felt different wording was needed, that is a policy question for
    `plan-reconcile`, not a wording fix at the child level.
+5a. **Apply the Named Production Primitive Preservation Rule.** If a
+    parent anchor names a production primitive, the child plan must keep
+    that primitive load-bearing in responsibility text, acceptance rows,
+    validation expectations, and test-double language. A child plan that
+    replaces a parent-required SDK, MCP client, production builder,
+    runtime mode, adapter, migration, or external client boundary with a
+    generic callback, fake runner, dependency string, constructor slot,
+    local-only adapter, or "test double" wording is a `mismatch` unless
+    the parent explicitly allowed that substitute. Fake/local wording is
+    acceptable only when it clearly limits the fake to external
+    responses, network, model output, provider failure, clock, storage,
+    or operator input while preserving the production primitive itself.
 6. **Detect recurrence.** Compare current rows against `prior_findings`
    (if passed). Recurrence keys on `parent_anchor + child_anchor +
    audit_verdict + next_action` per plan-protocol § 8 (checkpoint-
@@ -214,6 +231,12 @@ citation, and does not reject a Codex framing without citation).
   reference them as authoritative gates.
 - **Idempotence.** Two invocations with the same inputs produce the
   same JSON.
+- **Production primitive preservation.** Do not approve a child plan
+  that turns a parent-locked production primitive into a generic seam or
+  fake/local implementation detail. Use `revise` when the child can
+  restore the primitive and limit test doubles without a parent change;
+  use `decision-needed` or `plan-defect` when the parent/child contract
+  is ambiguous or contradictory.
 
 ## `.structured_output` Payload Example
 
